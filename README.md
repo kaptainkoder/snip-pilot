@@ -14,7 +14,7 @@ Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick 
 - Object-aware eraser for removing annotations without damaging screenshot pixels.
 - Auto-copy to clipboard when the editor is closed.
 - Best-effort manual scrolling capture that records a fixed region while you scroll underneath it, then stitches the frames into one tall PNG.
-- Scroll stitching detects whether you moved up or down, orders the final image accordingly, and removes repeated stable headers or footers when it can identify them.
+- Scroll stitching detects up/down movement and removes repeated stable headers or footers when it can identify them.
 - Clean local library grouped by date with filters for all, today, week, and month.
 - Local-only storage with no backend, telemetry, analytics, CDN assets, or auto-upload.
 
@@ -97,7 +97,7 @@ If you start near the top and scroll down, the final image is ordered top-to-bot
 ## Limitations
 
 - Scrolling capture is best-effort. macOS does not expose a universal scrolling screenshot API for every app.
-- Fixed headers or footers are cropped from middle frames when they are stable across captures. Highly dynamic headers can still repeat, so selecting the content area below sticky headers remains the cleanest option.
+- Stable fixed headers or footers are cropped from middle frames when Snip Pilot can identify them. Highly dynamic headers can still repeat, so selecting the content area below sticky headers remains the cleanest option.
 - Highly dynamic pages, sticky headers, lazy-loaded content, and animations can reduce stitch quality.
 
 ## Development Notes
