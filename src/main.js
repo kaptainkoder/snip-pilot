@@ -3,7 +3,7 @@ const { execFile } = require('child_process');
 const fs = require('fs/promises');
 const path = require('path');
 const os = require('os');
-const { Jimp, rgbaToInt } = require('jimp');
+const { stitchScrollFrames } = require('./lib/scroll-stitch');
 
 const isMac = process.platform === 'darwin';
 const shortcut = 'Command+2';
@@ -32,7 +32,7 @@ function handleCaptureShortcut() {
   }
 
   const now = Date.now();
-  if (now - lastShortcutAt < 900) {
+  if (now - lastShortcutAt < 1200) {
     clearTimeout(shortcutModeTimer);
     shortcutModeTimer = null;
     lastShortcutAt = 0;
@@ -44,7 +44,7 @@ function handleCaptureShortcut() {
     shortcutModeTimer = null;
     lastShortcutAt = 0;
     startSnip();
-  }, 280);
+  }, 650);
 }
 
 function hardenWindow(window) {
@@ -362,82 +362,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function pixelBrightness(image, x, y) {
-  const index = (image.bitmap.width * y + x) * 4;
-  const data = image.bitmap.data;
-  return (data[index] + data[index + 1] + data[index + 2]) / 3;
-}
-
-function rowDifference(previous, next, overlap, sampleStep) {
-  const width = Math.min(previous.bitmap.width, next.bitmap.width);
-  const heightA = previous.bitmap.height;
-  let diff = 0;
-  let count = 0;
-  for (let y = 0; y < overlap; y += sampleStep) {
-    for (let x = 0; x < width; x += sampleStep) {
-      diff += Math.abs(pixelBrightness(previous, x, heightA - overlap + y) - pixelBrightness(next, x, y));
-      count += 1;
-    }
-  }
-  return count ? diff / count : Number.MAX_VALUE;
-}
-
-function frameDifference(previous, next) {
-  const width = Math.min(previous.bitmap.width, next.bitmap.width);
-  const height = Math.min(previous.bitmap.height, next.bitmap.height);
-  const sampleStep = Math.max(10, Math.floor(width / 80));
-  let diff = 0;
-  let count = 0;
-  for (let y = 0; y < height; y += sampleStep) {
-    for (let x = 0; x < width; x += sampleStep) {
-      diff += Math.abs(pixelBrightness(previous, x, y) - pixelBrightness(next, x, y));
-      count += 1;
-    }
-  }
-  return count ? diff / count : 0;
-}
-
-function findOverlap(previous, next) {
-  const maxOverlap = Math.floor(Math.min(previous.bitmap.height, next.bitmap.height) * 0.92);
-  const minOverlap = Math.floor(Math.min(previous.bitmap.height, next.bitmap.height) * 0.05);
-  const sampleStep = Math.max(8, Math.floor(previous.bitmap.width / 90));
-  let bestOverlap = Math.floor(Math.min(previous.bitmap.height, next.bitmap.height) * 0.22);
-  let bestScore = Number.MAX_VALUE;
-  for (let overlap = minOverlap; overlap <= maxOverlap; overlap += sampleStep) {
-    const score = rowDifference(previous, next, overlap, sampleStep);
-    if (score < bestScore) {
-      bestScore = score;
-      bestOverlap = overlap;
-    }
-  }
-  return bestOverlap;
-}
-
-async function stitchScrollFrames(framePaths, outputPath) {
-  const rawFrames = await Promise.all(framePaths.map((filePath) => Jimp.read(filePath)));
-  const frames = [];
-  rawFrames.forEach((frame) => {
-    const previous = frames[frames.length - 1];
-    if (!previous || frameDifference(previous, frame) > 2) frames.push(frame);
-  });
-  if (!frames.length) throw new Error('No scroll frames were captured.');
-  const pieces = [frames[0]];
-  for (let index = 1; index < frames.length; index += 1) {
-    const overlap = findOverlap(frames[index - 1], frames[index]);
-    const height = Math.max(1, frames[index].bitmap.height - overlap);
-    pieces.push(frames[index].clone().crop({ x: 0, y: overlap, w: frames[index].bitmap.width, h: height }));
-  }
-  const width = Math.max(...pieces.map((piece) => piece.bitmap.width));
-  const height = pieces.reduce((sum, piece) => sum + piece.bitmap.height, 0);
-  const output = new Jimp({ width, height, color: rgbaToInt(255, 255, 255, 255) });
-  let y = 0;
-  pieces.forEach((piece) => {
-    output.composite(piece, 0, y);
-    y += piece.bitmap.height;
-  });
-  await output.write(outputPath);
-}
-
 async function startManualScrollCapture(rect) {
   await ensureStorage();
   const id = `scroll-${timestamp()}`;
@@ -472,7 +396,7 @@ async function captureScrollFrame() {
   session.capturing = true;
   try {
     if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) scrollFrameWindow.hide();
-    await sleep(60);
+    await sleep(140);
     const framePath = path.join(session.tempDir, `frame-${String(session.framePaths.length).padStart(3, '0')}.png`);
     await captureRegionToFile(session.rect, framePath);
     session.framePaths.push(framePath);
