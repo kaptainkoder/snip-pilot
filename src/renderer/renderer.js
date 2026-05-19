@@ -9,11 +9,18 @@ const editBtn = document.getElementById('editBtn');
 const copyBtn = document.getElementById('copyBtn');
 const saveBtn = document.getElementById('saveBtn');
 const discardBtn = document.getElementById('discardBtn');
+const setupPanel = document.getElementById('setupPanel');
+const settingsBtn = document.getElementById('settingsBtn');
+const storageInput = document.getElementById('storageInput');
+const shortcutInput = document.getElementById('shortcutInput');
+const chooseFolderBtn = document.getElementById('chooseFolderBtn');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 
 let currentSnip = null;
 let currentBucket = null;
 let latestSnips = { pending: [], copied: [] };
 let activeRange = 'all';
+let setupRequired = false;
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -68,6 +75,18 @@ function setActionState() {
   copyBtn.disabled = !hasSelection;
   saveBtn.disabled = !isPending;
   discardBtn.disabled = !isPending;
+}
+
+function applyConfigInfo(info) {
+  shortcutText.textContent = info.shortcut;
+  storagePath.textContent = info.captureDir;
+  storageInput.value = info.captureDir;
+  shortcutInput.value = info.shortcut;
+  setupRequired = Boolean(info.setupRequired);
+  setupPanel.hidden = !setupRequired && setupPanel.hidden;
+  setStatus(info.shortcutRegistered
+    ? `Ready. Press ${info.shortcut} anywhere while Snip Pilot is running.`
+    : `Ready, but ${info.shortcut} could not be registered. Choose another shortcut in Settings.`);
 }
 
 async function selectSnip(snip, bucket) {
@@ -171,6 +190,26 @@ document.getElementById('scrollCaptureBtn').addEventListener('click', async () =
 document.getElementById('refreshBtn').addEventListener('click', () => refreshLibrary(false));
 document.getElementById('openFolderBtn').addEventListener('click', () => window.snipPilot.openFolder());
 document.getElementById('quitBtn').addEventListener('click', () => window.snipPilot.quit());
+settingsBtn.addEventListener('click', () => {
+  setupPanel.hidden = !setupPanel.hidden;
+});
+
+chooseFolderBtn.addEventListener('click', async () => {
+  const selected = await window.snipPilot.chooseStorageDir();
+  if (selected) storageInput.value = selected;
+});
+
+saveSettingsBtn.addEventListener('click', async () => {
+  const info = await window.snipPilot.updateConfig({
+    storageDir: storageInput.value,
+    shortcut: shortcutInput.value
+  });
+  setupPanel.hidden = true;
+  applyConfigInfo(info);
+  await refreshLibrary(false);
+  setStatus(info.shortcutRegistered ? 'Local setup saved.' : `${info.shortcut} could not be registered. Pick another shortcut.`);
+});
+
 editBtn.addEventListener('click', () => {
   if (!currentSnip) return;
   window.snipPilot.openEditor({ id: currentSnip.id, bucket: currentBucket });
@@ -232,12 +271,9 @@ window.snipPilot.onNewSnip(async () => {
 });
 
 window.snipPilot.onStatus(setStatus);
+window.snipPilot.onConfig(applyConfigInfo);
 
-window.snipPilot.getInfo().then((info) => {
-  shortcutText.textContent = info.shortcut;
-  storagePath.textContent = info.captureDir;
-  setStatus(info.shortcutRegistered ? `Ready. Press ${info.shortcut} anywhere while Snip Pilot is running.` : `Ready, but ${info.shortcut} could not be registered.`);
-});
+window.snipPilot.getInfo().then(applyConfigInfo);
 
 refreshLibrary(false);
 setActionState();

@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('snipPilot', {
   getInfo: () => ipcRenderer.invoke('app:get-info'),
+  chooseStorageDir: () => ipcRenderer.invoke('app:choose-storage-dir'),
+  updateConfig: (payload) => ipcRenderer.invoke('app:update-config', payload),
   quit: () => ipcRenderer.invoke('app:quit'),
   startSnip: () => ipcRenderer.invoke('app:start-snip'),
   startScrollSnip: () => ipcRenderer.invoke('app:start-scroll-snip'),
@@ -34,6 +36,7 @@ contextBridge.exposeInMainWorld('snipPilot', {
   onEditorFinishRequest: (callback) => ipcRenderer.on('editor:request-finish', () => callback()),
   onLibrarySnips: (callback) => ipcRenderer.on('library:snips', (_event, payload) => callback(payload)),
   onShelfSnips: (callback) => ipcRenderer.on('shelf:snips', (_event, payload) => callback(payload)),
+  onConfig: (callback) => ipcRenderer.on('app:config', (_event, payload) => callback(payload)),
   onScrollFrameState: (callback) => ipcRenderer.on('scroll:state', (_event, payload) => callback(payload)),
   onStatus: (callback) => ipcRenderer.on('app:status', (_event, payload) => callback(payload))
 });

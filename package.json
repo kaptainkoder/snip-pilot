@@ -1,6 +1,6 @@
 {
   "name": "snip-pilot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local-first macOS screenshot, snipping, annotation, and agent handoff desktop app.",
   "main": "src/main.js",
   "author": "Snip Pilot contributors",
@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --mac --dir",
-    "dist": "electron-builder --mac"
+    "dist": "electron-builder --mac dmg --arm64"
   },
   "build": {
     "appId": "local.snippilot.app",
@@ -19,8 +19,13 @@
         {
           "target": "dir",
           "arch": [
-            "arm64",
-            "x64"
+            "arm64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
           ]
         }
       ]

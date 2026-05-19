@@ -84,6 +84,53 @@ h1 {
   gap: 8px;
 }
 
+.setup {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 2fr) 180px 120px;
+  align-items: end;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #fffaf0;
+}
+
+.setup[hidden] {
+  display: none;
+}
+
+.setup h2 {
+  font-size: 15px;
+}
+
+.setup p,
+.setup span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.setup label {
+  display: grid;
+  gap: 5px;
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.setup input,
+.setup select {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+}
+
 .filters {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -237,6 +284,10 @@ h1 {
 
   .topbar {
     display: grid;
+  }
+
+  .setup {
+    grid-template-columns: 1fr;
   }
 
   .content {
