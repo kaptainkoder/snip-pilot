@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file:; style-src 'self'; script-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Snip Pilot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>Snip Pilot</h1>
+          <p id="status">Local snip storage is ready.</p>
+        </div>
+        <div class="commands">
+          <button id="captureBtn" class="primary">New snip</button>
+          <button id="scrollCaptureBtn">Scroll snip</button>
+          <button id="editBtn">Edit</button>
+          <button id="copyBtn">Copy</button>
+          <button id="saveBtn">Done</button>
+          <button id="discardBtn">Discard</button>
+          <button id="openFolderBtn">Folder</button>
+          <button id="quitBtn">Quit</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="preview">
+          <img id="previewImage" alt="" />
+          <div id="emptyState">
+            <h2>No snip selected</h2>
+            <p>Press <span id="shortcutText">Cmd+2</span> or click New snip, then drag a region.</p>
+          </div>
+        </section>
+
+        <aside class="library">
+          <div class="libraryHeader">
+            <h2>Local storage</h2>
+            <button id="refreshBtn">Refresh</button>
+          </div>
+          <p id="storagePath"></p>
+          <div class="filters" aria-label="Date filters">
+            <button class="filter active" data-range="all">All</button>
+            <button class="filter" data-range="today">Today</button>
+            <button class="filter" data-range="week">Week</button>
+            <button class="filter" data-range="month">Month</button>
+          </div>
+
+          <h3>Pending</h3>
+          <div id="pendingList" class="snipList"></div>
+
+          <h3>Copied</h3>
+          <div id="copiedList" class="snipList"></div>
+        </aside>
+      </main>
+    </div>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
