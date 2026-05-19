@@ -15,13 +15,22 @@ let mainWindow;
 let overlayWindow;
 let shelfWindow;
 let editorWindow;
+let scrollFrameWindow;
 let editorForceClose = false;
 let tray;
 let shortcutRegistered = false;
 let lastShortcutAt = 0;
 let shortcutModeTimer = null;
+let activeScrollSession = null;
 
 function handleCaptureShortcut() {
+  if (activeScrollSession) {
+    finishManualScrollCapture().catch((error) => {
+      dialog.showErrorBox('Scroll capture failed', error.message);
+    });
+    return;
+  }
+
   const now = Date.now();
   if (now - lastShortcutAt < 900) {
     clearTimeout(shortcutModeTimer);
@@ -235,6 +244,43 @@ function createShelfWindow() {
   shelfWindow.loadFile(path.join(__dirname, 'renderer', 'shelf.html'));
 }
 
+function createScrollFrameWindow(rect) {
+  if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) {
+    scrollFrameWindow.close();
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const bounds = primaryDisplay.bounds;
+  scrollFrameWindow = new BrowserWindow({
+    x: bounds.x + Math.round(rect.left),
+    y: bounds.y + Math.round(rect.top),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    fullscreenable: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
+    }
+  });
+
+  hardenWindow(scrollFrameWindow);
+  scrollFrameWindow.setIgnoreMouseEvents(true);
+  scrollFrameWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  scrollFrameWindow.setContentProtection(true);
+  scrollFrameWindow.loadFile(path.join(__dirname, 'renderer', 'scroll-frame.html'));
+}
+
 function createEditorWindow(record) {
   if (editorWindow && !editorWindow.isDestroyed()) {
     editorWindow.close();
@@ -312,10 +358,6 @@ async function captureRegionToFile(rect, filePath) {
   await runFile('/usr/sbin/screencapture', ['-x', '-t', 'png', '-R', region, filePath]);
 }
 
-async function sendPageDown() {
-  await runFile('/usr/bin/osascript', ['-e', 'tell application "System Events" to key code 121']);
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -340,9 +382,24 @@ function rowDifference(previous, next, overlap, sampleStep) {
   return count ? diff / count : Number.MAX_VALUE;
 }
 
+function frameDifference(previous, next) {
+  const width = Math.min(previous.bitmap.width, next.bitmap.width);
+  const height = Math.min(previous.bitmap.height, next.bitmap.height);
+  const sampleStep = Math.max(10, Math.floor(width / 80));
+  let diff = 0;
+  let count = 0;
+  for (let y = 0; y < height; y += sampleStep) {
+    for (let x = 0; x < width; x += sampleStep) {
+      diff += Math.abs(pixelBrightness(previous, x, y) - pixelBrightness(next, x, y));
+      count += 1;
+    }
+  }
+  return count ? diff / count : 0;
+}
+
 function findOverlap(previous, next) {
-  const maxOverlap = Math.floor(Math.min(previous.bitmap.height, next.bitmap.height) * 0.55);
-  const minOverlap = Math.floor(Math.min(previous.bitmap.height, next.bitmap.height) * 0.12);
+  const maxOverlap = Math.floor(Math.min(previous.bitmap.height, next.bitmap.height) * 0.92);
+  const minOverlap = Math.floor(Math.min(previous.bitmap.height, next.bitmap.height) * 0.05);
   const sampleStep = Math.max(8, Math.floor(previous.bitmap.width / 90));
   let bestOverlap = Math.floor(Math.min(previous.bitmap.height, next.bitmap.height) * 0.22);
   let bestScore = Number.MAX_VALUE;
@@ -357,7 +414,12 @@ function findOverlap(previous, next) {
 }
 
 async function stitchScrollFrames(framePaths, outputPath) {
-  const frames = await Promise.all(framePaths.map((filePath) => Jimp.read(filePath)));
+  const rawFrames = await Promise.all(framePaths.map((filePath) => Jimp.read(filePath)));
+  const frames = [];
+  rawFrames.forEach((frame) => {
+    const previous = frames[frames.length - 1];
+    if (!previous || frameDifference(previous, frame) > 2) frames.push(frame);
+  });
   if (!frames.length) throw new Error('No scroll frames were captured.');
   const pieces = [frames[0]];
   for (let index = 1; index < frames.length; index += 1) {
@@ -376,31 +438,75 @@ async function stitchScrollFrames(framePaths, outputPath) {
   await output.write(outputPath);
 }
 
-async function captureScrollingRegion(rect) {
+async function startManualScrollCapture(rect) {
   await ensureStorage();
   const id = `scroll-${timestamp()}`;
   const paths = snipPaths('pending', id);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snip-pilot-scroll-'));
-  const framePaths = [];
+
+  activeScrollSession = {
+    id,
+    rect,
+    outputPath: paths.imagePath,
+    tempDir,
+    framePaths: [],
+    timer: null,
+    capturing: false,
+    finishing: false
+  };
+
+  if (shelfWindow && !shelfWindow.isDestroyed()) shelfWindow.hide();
+  createScrollFrameWindow(rect);
+  await captureScrollFrame();
+  activeScrollSession.timer = setInterval(() => {
+    captureScrollFrame().catch(() => {});
+  }, 850);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app:status', 'Manual scroll capture running. Scroll the page, then press Cmd+2 to finish.');
+  }
+}
+
+async function captureScrollFrame() {
+  const session = activeScrollSession;
+  if (!session || session.capturing || session.finishing) return;
+  session.capturing = true;
   try {
-    if (shelfWindow && !shelfWindow.isDestroyed()) shelfWindow.hide();
-    await sleep(350);
-    const frameCount = 5;
-    for (let index = 0; index < frameCount; index += 1) {
-      const framePath = path.join(tempDir, `frame-${index}.png`);
-      await captureRegionToFile(rect, framePath);
-      framePaths.push(framePath);
-      if (index < frameCount - 1) {
-        await sendPageDown();
-        await sleep(650);
-      }
+    if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) scrollFrameWindow.hide();
+    await sleep(60);
+    const framePath = path.join(session.tempDir, `frame-${String(session.framePaths.length).padStart(3, '0')}.png`);
+    await captureRegionToFile(session.rect, framePath);
+    session.framePaths.push(framePath);
+  } finally {
+    if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) scrollFrameWindow.showInactive();
+    session.capturing = false;
+  }
+}
+
+async function finishManualScrollCapture() {
+  const session = activeScrollSession;
+  if (!session || session.finishing) return null;
+  clearInterval(session.timer);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app:status', 'Finishing scrolling snip...');
+  }
+  try {
+    while (session.capturing) await sleep(50);
+    await captureScrollFrame();
+    session.finishing = true;
+    if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) {
+      scrollFrameWindow.close();
+      scrollFrameWindow = null;
     }
-    await stitchScrollFrames(framePaths, paths.imagePath);
-    const metadata = await recordFromPath('pending', paths.imagePath);
+    await stitchScrollFrames(session.framePaths, session.outputPath);
+    const metadata = await recordFromPath('pending', session.outputPath);
     await refreshSnipViews();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:status', 'Scrolling snip saved locally to Pending.');
+    }
     return metadata;
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(session.tempDir, { recursive: true, force: true });
+    activeScrollSession = null;
   }
 }
 
@@ -554,11 +660,9 @@ ipcMain.on('overlay:snip', (_event, payload) => {
 ipcMain.on('overlay:scroll-region', (_event, payload) => {
   (async () => {
     if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.close();
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:status', 'Capturing scrolling snip...');
-    await captureScrollingRegion(payload.rect);
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:status', 'Scrolling snip saved locally to Pending.');
+    await startManualScrollCapture(payload.rect);
   })().catch((error) => {
-    dialog.showErrorBox('Scroll capture failed', `${error.message}\n\nScrolling capture may require Accessibility permission so Snip Pilot can send Page Down to the active app.`);
+    dialog.showErrorBox('Scroll capture failed', `${error.message}\n\nManual scrolling capture records the fixed region while you scroll the underlying app, then finishes when you press Cmd+2.`);
   });
 });
 

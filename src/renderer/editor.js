@@ -15,6 +15,9 @@ let activeObject = null;
 let objects = [];
 let undoStack = [];
 let finishing = false;
+let selectedObjectIndex = -1;
+let movingObjectIndex = -1;
+let moveOffset = { x: 0, y: 0 };
 
 function cloneObjects(value = objects) {
   return JSON.parse(JSON.stringify(value));
@@ -158,6 +161,33 @@ function drawObject(object) {
   ctx.restore();
 }
 
+function drawSelection(object) {
+  if (!object) return;
+  let x;
+  let y;
+  let width;
+  let height;
+  if (object.type === 'text') {
+    x = object.x;
+    y = object.y;
+    width = object.width;
+    height = object.height;
+  } else if (object.from && object.to) {
+    x = Math.min(object.from.x, object.to.x);
+    y = Math.min(object.from.y, object.to.y);
+    width = Math.abs(object.to.x - object.from.x);
+    height = Math.abs(object.to.y - object.from.y);
+  } else {
+    return;
+  }
+  ctx.save();
+  ctx.strokeStyle = '#2f9bd3';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 6]);
+  ctx.strokeRect(x - 5, y - 5, width + 10, height + 10);
+  ctx.restore();
+}
+
 function render() {
   if (!baseImage) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -167,6 +197,7 @@ function render() {
   highlights.forEach(drawObject);
   rest.forEach(drawObject);
   if (activeObject) drawObject(activeObject);
+  if (selectedObjectIndex >= 0 && !activeObject) drawSelection(objects[selectedObjectIndex]);
 }
 
 function objectHit(object, item) {
@@ -194,11 +225,19 @@ function eraseAt(item) {
     if (objectHit(objects[index], item)) {
       pushUndo();
       objects.splice(index, 1);
+      selectedObjectIndex = -1;
       render();
       return true;
     }
   }
   return false;
+}
+
+function findTopmostObject(item, predicate = () => true) {
+  for (let index = objects.length - 1; index >= 0; index -= 1) {
+    if (predicate(objects[index]) && objectHit(objects[index], item)) return index;
+  }
+  return -1;
 }
 
 function measureTextObject(object) {
@@ -255,6 +294,7 @@ async function finishAndClose() {
   if (finishing || !snip || !baseImage) return;
   finishing = true;
   if (activeObject?.type === 'text') commitActiveText();
+  selectedObjectIndex = -1;
   render();
   await window.snipPilot.finishEditor({
     id: snip.id,
@@ -274,9 +314,26 @@ canvas.addEventListener('mousedown', (event) => {
   canvas.focus();
 
   if (tool === 'text') {
+    if (activeObject?.type === 'text') commitActiveText();
+    const hitIndex = findTopmostObject(start, (object) => object.type === 'text');
+    if (hitIndex >= 0) {
+      pushUndo();
+      selectedObjectIndex = hitIndex;
+      movingObjectIndex = hitIndex;
+      moveOffset = {
+        x: start.x - objects[hitIndex].x,
+        y: start.y - objects[hitIndex].y
+      };
+      drawing = true;
+      render();
+      return;
+    }
+    selectedObjectIndex = -1;
     startTextObject(start);
     return;
   }
+
+  selectedObjectIndex = -1;
 
   if (tool === 'number') {
     pushUndo();
@@ -324,6 +381,13 @@ canvas.addEventListener('mousedown', (event) => {
 canvas.addEventListener('mousemove', (event) => {
   if (!drawing) return;
   const next = point(event);
+  if (tool === 'text' && movingObjectIndex >= 0) {
+    objects[movingObjectIndex].x = next.x - moveOffset.x;
+    objects[movingObjectIndex].y = next.y - moveOffset.y;
+    selectedObjectIndex = movingObjectIndex;
+    render();
+    return;
+  }
   if (tool === 'eraser') {
     eraseAt(next);
     return;
@@ -337,6 +401,12 @@ canvas.addEventListener('mousemove', (event) => {
 canvas.addEventListener('mouseup', () => {
   if (!drawing) return;
   drawing = false;
+  if (movingObjectIndex >= 0) {
+    selectedObjectIndex = movingObjectIndex;
+    movingObjectIndex = -1;
+    render();
+    return;
+  }
   if (activeObject) {
     objects.push(activeObject);
     activeObject = null;
@@ -349,6 +419,8 @@ document.getElementById('undoBtn').addEventListener('click', () => {
   if (!previous) return;
   objects = previous;
   activeObject = null;
+  selectedObjectIndex = -1;
+  movingObjectIndex = -1;
   render();
 });
 
@@ -356,6 +428,8 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   pushUndo();
   objects = [];
   activeObject = null;
+  selectedObjectIndex = -1;
+  movingObjectIndex = -1;
   render();
 });
 

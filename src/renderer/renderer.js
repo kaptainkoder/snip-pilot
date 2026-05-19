@@ -163,7 +163,7 @@ document.getElementById('captureBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('scrollCaptureBtn').addEventListener('click', async () => {
-  setStatus('Select the scroll area. Snip Pilot will capture and stitch repeated Page Down steps.');
+  setStatus('Select the fixed scroll area. Scroll normally, then press Cmd+2 to finish.');
   const result = await window.snipPilot.startScrollSnip();
   if (result?.error) setStatus(`Scroll snip failed: ${result.error}`);
 });
