@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'none'; img-src 'self' data: file:; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scroll Capture Controls</title>
+    <link rel="stylesheet" href="./scroll-controls.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <div class="status">
+        <strong id="segmentCount">1 frame</strong>
+        <span id="frameStatus">Scroll, then add the next view.</span>
+      </div>
+      <div class="buttons">
+        <button id="addAboveBtn" type="button">Add above</button>
+        <button id="addBelowBtn" type="button">Add below</button>
+        <button id="autoBtn" type="button">Auto capture</button>
+        <button id="doneBtn" class="primary" type="button">Done</button>
+        <button id="cancelBtn" type="button">Cancel</button>
+      </div>
+    </div>
+    <script src="./scroll-controls.js"></script>
+  </body>
+</html>

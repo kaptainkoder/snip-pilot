@@ -1,6 +1,6 @@
 {
   "name": "snip-pilot",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A local-first macOS screenshot, snipping, annotation, and agent handoff desktop app.",
   "main": "src/main.js",
   "author": "Snip Pilot contributors",

@@ -12,7 +12,6 @@ contextBridge.exposeInMainWorld('snipPilot', {
   finishOverlaySnip: (payload) => ipcRenderer.send('overlay:snip', payload),
   finishScrollRegion: (payload) => ipcRenderer.send('overlay:scroll-region', payload),
   cancelOverlay: () => ipcRenderer.send('overlay:cancel'),
-  setScrollFrameInteractive: (active) => ipcRenderer.send('scroll-frame:interactive', active),
   captureScrollSegment: (direction) => ipcRenderer.invoke('scroll:capture-segment', direction),
   finishScrollCapture: () => ipcRenderer.invoke('scroll:finish'),
   cancelScrollCapture: () => ipcRenderer.invoke('scroll:cancel'),

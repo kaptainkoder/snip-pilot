@@ -1,0 +1,81 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  color: #fff;
+  user-select: none;
+  font: 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.panel {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 8px;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  background: rgba(17, 20, 24, 0.9);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+}
+
+.status {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.status strong {
+  color: #f5c542;
+  font-size: 13px;
+}
+
+.status span {
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 7px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  font: inherit;
+}
+
+button.primary {
+  color: #11151b;
+  border-color: #f5c542;
+  background: #f5c542;
+  font-weight: 700;
+}
+
+button.active {
+  color: #11151b;
+  border-color: #80d39b;
+  background: #80d39b;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
