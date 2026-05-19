@@ -6,10 +6,7 @@ const os = require('os');
 const { Jimp, rgbaToInt } = require('jimp');
 
 const isMac = process.platform === 'darwin';
-const shortcut = 'Command+2';
-const captureDir = process.env.SNIP_PILOT_STORAGE_DIR || path.join(app.getPath('documents'), 'SnipPilotSnips');
-const pendingDir = path.join(captureDir, 'Pending');
-const copiedDir = path.join(captureDir, 'Copied');
+const defaultShortcut = 'Command+2';
 
 let mainWindow;
 let overlayWindow;
@@ -22,6 +19,16 @@ let shortcutRegistered = false;
 let lastShortcutAt = 0;
 let shortcutModeTimer = null;
 let activeScrollSession = null;
+let registeredShortcut = null;
+let shortcut = defaultShortcut;
+let captureDir;
+let pendingDir;
+let copiedDir;
+let appConfig = {
+  configured: false,
+  shortcut: defaultShortcut,
+  storageDir: null
+};
 
 function handleCaptureShortcut() {
   if (activeScrollSession) {
@@ -55,6 +62,82 @@ function hardenWindow(window) {
   window.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
+}
+
+function defaultCaptureDir() {
+  return process.env.SNIP_PILOT_STORAGE_DIR || path.join(app.getPath('documents'), 'SnipPilotSnips');
+}
+
+function configPath() {
+  return path.join(app.getPath('userData'), 'config.json');
+}
+
+function applyConfig(config) {
+  appConfig = {
+    configured: Boolean(config.configured),
+    shortcut: config.shortcut || defaultShortcut,
+    storageDir: config.storageDir || defaultCaptureDir()
+  };
+  shortcut = appConfig.shortcut;
+  captureDir = appConfig.storageDir;
+  pendingDir = path.join(captureDir, 'Pending');
+  copiedDir = path.join(captureDir, 'Copied');
+}
+
+async function loadConfig() {
+  const fallback = {
+    configured: false,
+    shortcut: defaultShortcut,
+    storageDir: defaultCaptureDir()
+  };
+  try {
+    const data = JSON.parse(await fs.readFile(configPath(), 'utf8'));
+    applyConfig({ ...fallback, ...data });
+  } catch {
+    applyConfig(fallback);
+  }
+}
+
+async function saveConfig(patch) {
+  const next = {
+    ...appConfig,
+    ...patch,
+    configured: patch.configured ?? true
+  };
+  applyConfig(next);
+  await fs.mkdir(app.getPath('userData'), { recursive: true });
+  await fs.writeFile(configPath(), `${JSON.stringify(appConfig, null, 2)}\n`);
+  await ensureStorage();
+  registerCaptureShortcut();
+  await refreshSnipViews();
+  notifyConfig();
+  return appInfo();
+}
+
+function appInfo() {
+  return {
+    shortcut,
+    shortcutRegistered,
+    setupRequired: !appConfig.configured,
+    captureDir,
+    pendingDir,
+    copiedDir
+  };
+}
+
+function notifyConfig() {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:config', appInfo());
+}
+
+function registerCaptureShortcut() {
+  if (registeredShortcut) globalShortcut.unregister(registeredShortcut);
+  shortcutRegistered = globalShortcut.register(shortcut, handleCaptureShortcut);
+  registeredShortcut = shortcutRegistered ? shortcut : null;
+  if (!shortcutRegistered) {
+    console.error(`Failed to register shortcut ${shortcut}`);
+  }
+  notifyConfig();
+  return shortcutRegistered;
 }
 
 async function ensureStorage() {
@@ -794,6 +877,7 @@ function createTray() {
 }
 
 app.whenReady().then(async () => {
+  await loadConfig();
   await ensureStorage();
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     const allowed = ['file:', 'data:', 'devtools:'].some((protocol) => details.url.startsWith(protocol));
@@ -802,10 +886,7 @@ app.whenReady().then(async () => {
   createMainWindow();
   createShelfWindow();
   createTray();
-  shortcutRegistered = globalShortcut.register(shortcut, handleCaptureShortcut);
-  if (!shortcutRegistered) {
-    console.error(`Failed to register shortcut ${shortcut}`);
-  }
+  registerCaptureShortcut();
   await refreshSnipViews();
 
   app.on('activate', () => {
@@ -826,12 +907,22 @@ ipcMain.handle('app:start-snip', startSnip);
 
 ipcMain.handle('app:start-scroll-snip', startScrollSnip);
 
-ipcMain.handle('app:get-info', () => ({
-  shortcut,
-  shortcutRegistered,
-  captureDir,
-  pendingDir,
-  copiedDir
+ipcMain.handle('app:get-info', () => appInfo());
+
+ipcMain.handle('app:choose-storage-dir', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose local snip storage folder',
+    defaultPath: captureDir,
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('app:update-config', async (_event, payload = {}) => saveConfig({
+  configured: true,
+  shortcut: payload.shortcut || shortcut,
+  storageDir: payload.storageDir || captureDir
 }));
 
 ipcMain.handle('app:quit', () => {

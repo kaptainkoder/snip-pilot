@@ -2,6 +2,15 @@
 
 Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick access, annotation, scrolling capture, and clipboard handoff. It is designed for people who want to capture UI feedback while working and paste the result into a chat, issue, document, or agent workflow without uploading anything to a hosted service.
 
+## Download
+
+Download the unsigned macOS build:
+
+- [SnipPilot-0.2.0-arm64.dmg](downloads/SnipPilot-0.2.0-arm64.dmg)
+- [SHA-256 checksum](downloads/SnipPilot-0.2.0-arm64.dmg.sha256)
+
+This build is for Apple Silicon Macs. Because it is not Apple Developer ID signed, macOS may require right-clicking the app and choosing Open on first launch.
+
 ## Features
 
 - Global `Cmd+2` snip shortcut while the app is running.
@@ -15,6 +24,7 @@ Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick 
 - Auto-copy to clipboard when the editor is closed.
 - Edge-driven scrolling capture: select a region, scroll the page, then drag the top or bottom edge to add each view before stitching.
 - Scroll stitching detects up/down movement and removes repeated stable headers or footers when it can identify them.
+- First-run local setup for choosing the storage folder and global shortcut.
 - Clean local library grouped by date with filters for all, today, week, and month.
 - Local-only storage with no backend, telemetry, analytics, CDN assets, or auto-upload.
 
@@ -42,6 +52,15 @@ Storage behavior:
 - Clicking the small `x` on a floating snip copies it and moves it into `Copied`.
 - `Discard` deletes a pending snip completely.
 - No JSON, Markdown, cloud sync, or hidden sidecar files are written by the app.
+
+## Local Setup
+
+On first launch, Snip Pilot opens a local setup panel. Choose:
+
+- The local folder where all snips should be stored.
+- The global capture shortcut, such as `Cmd+2`, `Cmd+Shift+2`, or `Cmd+Option+2`.
+
+The app keeps this configuration in the local macOS application support folder. It is not uploaded.
 
 ## Privacy And Security
 
@@ -73,6 +92,14 @@ The packaged macOS app is created under:
 ```text
 release/mac-arm64/Snip Pilot.app
 ```
+
+To build a shareable DMG:
+
+```sh
+npm run dist
+```
+
+The unsigned DMG is created under `release/`. Because this project is not Apple Developer ID signed, macOS may require right-clicking the app and choosing Open on first launch.
 
 ## Use It
 

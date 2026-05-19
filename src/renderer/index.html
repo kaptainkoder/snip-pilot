@@ -21,10 +21,35 @@
           <button id="copyBtn">Copy</button>
           <button id="saveBtn">Done</button>
           <button id="discardBtn">Discard</button>
+          <button id="settingsBtn">Settings</button>
           <button id="openFolderBtn">Folder</button>
           <button id="quitBtn">Quit</button>
         </div>
       </header>
+
+      <section class="setup" id="setupPanel" hidden>
+        <div>
+          <h2>Local setup</h2>
+          <p>Choose where snips stay on this Mac and which shortcut starts capture.</p>
+        </div>
+        <label>
+          <span>Storage folder</span>
+          <div class="fieldRow">
+            <input id="storageInput" type="text" spellcheck="false" />
+            <button id="chooseFolderBtn" type="button">Choose</button>
+          </div>
+        </label>
+        <label>
+          <span>Shortcut</span>
+          <select id="shortcutInput">
+            <option value="Command+2">Cmd+2</option>
+            <option value="Command+Shift+2">Cmd+Shift+2</option>
+            <option value="Command+Option+2">Cmd+Option+2</option>
+            <option value="Command+Shift+5">Cmd+Shift+5</option>
+          </select>
+        </label>
+        <button id="saveSettingsBtn" class="primary" type="button">Save setup</button>
+      </section>
 
       <main class="content">
         <section class="preview">
