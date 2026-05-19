@@ -1,6 +1,7 @@
 const canvas = document.getElementById('screen');
 const ctx = canvas.getContext('2d');
 const selection = document.getElementById('selection');
+const hint = document.querySelector('.hint');
 
 let image;
 let dataUrl;
@@ -60,6 +61,7 @@ function cropSelection(rect) {
 window.snipPilot.onOverlayCapture((payload) => {
   dataUrl = payload.dataUrl;
   mode = payload.mode || 'snip';
+  hint.textContent = mode === 'scroll' ? 'Drag the visible area to capture. Esc cancels.' : 'Drag to snip. Esc cancels.';
   image = new Image();
   image.onload = resizeCanvas;
   image.src = dataUrl;

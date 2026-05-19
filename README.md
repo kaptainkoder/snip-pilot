@@ -13,7 +13,7 @@ Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick 
 - Text entry directly on the snip canvas.
 - Object-aware eraser for removing annotations without damaging screenshot pixels.
 - Auto-copy to clipboard when the editor is closed.
-- Best-effort manual scrolling capture that records a fixed region while you scroll underneath it, then stitches the frames into one tall PNG.
+- Edge-driven scrolling capture: select a region, scroll the page, then drag the top or bottom edge to add each view before stitching.
 - Scroll stitching detects up/down movement and removes repeated stable headers or footers when it can identify them.
 - Clean local library grouped by date with filters for all, today, week, and month.
 - Local-only storage with no backend, telemetry, analytics, CDN assets, or auto-upload.
@@ -52,7 +52,7 @@ Storage behavior:
 - Network requests are blocked except local `file:`, `data:`, and developer-tool URLs.
 - Clipboard writes are local macOS clipboard writes. Other local apps with clipboard access may be able to read copied images.
 - Screen Recording permission is required by macOS for screenshot apps.
-- Scrolling capture does not control the target app. You scroll manually while Snip Pilot records the selected fixed region.
+- Scrolling capture does not control the target app. You scroll manually, then explicitly add each view by dragging the selected top or bottom edge.
 - Snips are not encrypted at rest. Anyone with access to your macOS account or backups that include the storage folder may be able to read them.
 
 ## Install And Run
@@ -87,10 +87,11 @@ release/mac-arm64/Snip Pilot.app
 For scrolling capture:
 
 1. Press `Cmd+2` twice quickly or click `Scroll snip`.
-2. Drag the fixed region you want to record.
-3. Scroll the target app/window normally while the yellow capture frame stays in place.
-4. Press `Cmd+2` again to finish and stitch the captured frames.
-5. The stitched image appears as a pending snip.
+2. Drag the visible region you want to capture.
+3. Scroll the target app/window normally.
+4. Drag the bottom edge downward to add the current view below, or drag the top edge upward to add the current view above.
+5. Repeat scroll-and-drag until you have the full capture, then press `Cmd+2` or click `Done`.
+6. The stitched image appears as a pending snip.
 
 If you start near the top and scroll down, the final image is ordered top-to-bottom. If you start near the bottom and scroll up, the final image keeps the bottom content at the bottom.
 

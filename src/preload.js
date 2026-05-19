@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('snipPilot', {
   finishOverlaySnip: (payload) => ipcRenderer.send('overlay:snip', payload),
   finishScrollRegion: (payload) => ipcRenderer.send('overlay:scroll-region', payload),
   cancelOverlay: () => ipcRenderer.send('overlay:cancel'),
+  setScrollFrameInteractive: (active) => ipcRenderer.send('scroll-frame:interactive', active),
+  captureScrollSegment: (direction) => ipcRenderer.invoke('scroll:capture-segment', direction),
+  finishScrollCapture: () => ipcRenderer.invoke('scroll:finish'),
+  cancelScrollCapture: () => ipcRenderer.invoke('scroll:cancel'),
   saveCapture: (payload) => ipcRenderer.invoke('capture:save', payload),
   copyImage: (dataUrl) => ipcRenderer.invoke('capture:copy-image', dataUrl),
   copyAgentPrompt: (payload) => ipcRenderer.invoke('capture:copy-agent-prompt', payload),
@@ -30,5 +34,6 @@ contextBridge.exposeInMainWorld('snipPilot', {
   onEditorFinishRequest: (callback) => ipcRenderer.on('editor:request-finish', () => callback()),
   onLibrarySnips: (callback) => ipcRenderer.on('library:snips', (_event, payload) => callback(payload)),
   onShelfSnips: (callback) => ipcRenderer.on('shelf:snips', (_event, payload) => callback(payload)),
+  onScrollFrameState: (callback) => ipcRenderer.on('scroll:state', (_event, payload) => callback(payload)),
   onStatus: (callback) => ipcRenderer.on('app:status', (_event, payload) => callback(payload))
 });

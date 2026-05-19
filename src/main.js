@@ -275,10 +275,13 @@ function createScrollFrameWindow(rect) {
   });
 
   hardenWindow(scrollFrameWindow);
-  scrollFrameWindow.setIgnoreMouseEvents(true);
+  scrollFrameWindow.setIgnoreMouseEvents(true, { forward: true });
   scrollFrameWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   scrollFrameWindow.setContentProtection(true);
   scrollFrameWindow.loadFile(path.join(__dirname, 'renderer', 'scroll-frame.html'));
+  scrollFrameWindow.webContents.once('did-finish-load', () => {
+    sendScrollFrameState('Initial view captured. Scroll, then drag the bottom edge down or top edge up to add the next view.');
+  });
 }
 
 function createEditorWindow(record) {
@@ -537,7 +540,7 @@ function cropPiece(frame, y, height) {
   return frame.clone().crop({ x: 0, y: cropY, w: frame.bitmap.width, h: cropHeight });
 }
 
-async function stitchScrollFrames(framePaths, outputPath) {
+async function stitchScrollFrames(framePaths, outputPath, preferredDirection = null) {
   const rawFrames = await Promise.all(framePaths.map((filePath) => Jimp.read(filePath)));
   const frames = [];
   rawFrames.forEach((frame) => {
@@ -556,7 +559,7 @@ async function stitchScrollFrames(framePaths, outputPath) {
     transitions.push(compareFramePair(frames[index - 1], frames[index]));
   }
 
-  const direction = chooseScrollDirection(transitions);
+  const direction = ['up', 'down'].includes(preferredDirection) ? preferredDirection : chooseScrollDirection(transitions);
   const crops = buildCropPlan(frames, transitions, direction);
   const pieces = [];
 
@@ -608,6 +611,7 @@ async function startManualScrollCapture(rect) {
     tempDir,
     framePaths: [],
     timer: null,
+    direction: null,
     capturing: false,
     finishing: false
   };
@@ -615,17 +619,25 @@ async function startManualScrollCapture(rect) {
   if (shelfWindow && !shelfWindow.isDestroyed()) shelfWindow.hide();
   createScrollFrameWindow(rect);
   await captureScrollFrame();
-  activeScrollSession.timer = setInterval(() => {
-    captureScrollFrame().catch(() => {});
-  }, 850);
+  sendScrollFrameState('Initial view captured. Scroll, then drag the bottom edge down or top edge up to add the next view.');
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('app:status', 'Manual scroll capture running. Scroll the page, then press Cmd+2 to finish.');
+    mainWindow.webContents.send('app:status', 'Scroll capture running. Scroll, then drag the top or bottom edge to add a view. Press Cmd+2 to finish.');
   }
+}
+
+function sendScrollFrameState(message = '') {
+  if (!scrollFrameWindow || scrollFrameWindow.isDestroyed()) return;
+  const count = activeScrollSession?.framePaths?.length || 0;
+  scrollFrameWindow.webContents.send('scroll:state', {
+    count,
+    direction: activeScrollSession?.direction || null,
+    message
+  });
 }
 
 async function captureScrollFrame() {
   const session = activeScrollSession;
-  if (!session || session.capturing || session.finishing) return;
+  if (!session || session.capturing || session.finishing) return null;
   session.capturing = true;
   try {
     if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) scrollFrameWindow.hide();
@@ -633,10 +645,48 @@ async function captureScrollFrame() {
     const framePath = path.join(session.tempDir, `frame-${String(session.framePaths.length).padStart(3, '0')}.png`);
     await captureRegionToFile(session.rect, framePath);
     session.framePaths.push(framePath);
+    return framePath;
   } finally {
     if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) scrollFrameWindow.showInactive();
     session.capturing = false;
   }
+}
+
+async function captureScrollSegment(direction) {
+  const session = activeScrollSession;
+  if (!session || session.finishing) return { ok: false, error: 'No scrolling capture is active.' };
+  if (!['up', 'down'].includes(direction)) return { ok: false, error: 'Choose the top or bottom edge to add a view.' };
+  if (session.capturing) return { ok: false, error: 'A view is already being captured.' };
+  if (session.direction && session.direction !== direction) {
+    return { ok: false, error: `This capture is already extending ${session.direction}. Finish it before changing direction.` };
+  }
+
+  session.direction = direction;
+  await captureScrollFrame();
+  const message = direction === 'down'
+    ? 'Added below. Scroll farther down, then drag the bottom edge again, or click Done.'
+    : 'Added above. Scroll farther up, then drag the top edge again, or click Done.';
+  sendScrollFrameState(message);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app:status', `Scroll capture added ${session.framePaths.length} views.`);
+  }
+  return { ok: true, count: session.framePaths.length, direction: session.direction };
+}
+
+async function cancelManualScrollCapture() {
+  const session = activeScrollSession;
+  if (!session) return { ok: true };
+  clearInterval(session.timer);
+  activeScrollSession = null;
+  if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) {
+    scrollFrameWindow.close();
+    scrollFrameWindow = null;
+  }
+  await fs.rm(session.tempDir, { recursive: true, force: true });
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app:status', 'Scrolling snip cancelled.');
+  }
+  return { ok: true };
 }
 
 async function finishManualScrollCapture() {
@@ -648,13 +698,12 @@ async function finishManualScrollCapture() {
   }
   try {
     while (session.capturing) await sleep(50);
-    await captureScrollFrame();
     session.finishing = true;
     if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) {
       scrollFrameWindow.close();
       scrollFrameWindow = null;
     }
-    await stitchScrollFrames(session.framePaths, session.outputPath);
+    await stitchScrollFrames(session.framePaths, session.outputPath, session.direction);
     const metadata = await recordFromPath('pending', session.outputPath);
     await refreshSnipViews();
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -819,9 +868,21 @@ ipcMain.on('overlay:scroll-region', (_event, payload) => {
     if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.close();
     await startManualScrollCapture(payload.rect);
   })().catch((error) => {
-    dialog.showErrorBox('Scroll capture failed', `${error.message}\n\nManual scrolling capture records the fixed region while you scroll the underlying app, then finishes when you press Cmd+2.`);
+    dialog.showErrorBox('Scroll capture failed', `${error.message}\n\nScrolling capture records the selected region only when you drag the top or bottom edge, then stitches those selected views when you press Cmd+2 or Done.`);
   });
 });
+
+ipcMain.on('scroll-frame:interactive', (_event, active) => {
+  if (!scrollFrameWindow || scrollFrameWindow.isDestroyed()) return;
+  if (active) scrollFrameWindow.setIgnoreMouseEvents(false);
+  else scrollFrameWindow.setIgnoreMouseEvents(true, { forward: true });
+});
+
+ipcMain.handle('scroll:capture-segment', (_event, direction) => captureScrollSegment(direction));
+
+ipcMain.handle('scroll:finish', () => finishManualScrollCapture());
+
+ipcMain.handle('scroll:cancel', () => cancelManualScrollCapture());
 
 ipcMain.handle('capture:save', async (_event, payload) => {
   const id = payload.id || `snip-${timestamp()}`;
