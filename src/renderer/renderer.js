@@ -182,7 +182,7 @@ document.getElementById('captureBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('scrollCaptureBtn').addEventListener('click', async () => {
-  setStatus('Select the scroll area. Then scroll and drag the top or bottom edge to add views.');
+  setStatus('Select the scroll area. Then use Add above/Add below or Auto capture.');
   const result = await window.snipPilot.startScrollSnip();
   if (result?.error) setStatus(`Scroll snip failed: ${result.error}`);
 });

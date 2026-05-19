@@ -13,6 +13,7 @@ let overlayWindow;
 let shelfWindow;
 let editorWindow;
 let scrollFrameWindow;
+let scrollControlsWindow;
 let editorForceClose = false;
 let tray;
 let shortcutRegistered = false;
@@ -65,7 +66,7 @@ function hardenWindow(window) {
 }
 
 function defaultCaptureDir() {
-  return process.env.SNIP_PILOT_STORAGE_DIR || path.join(app.getPath('documents'), 'SnipPilotSnips');
+  return process.env.SNIP_PILOT_STORAGE_DIR || path.join(app.getPath('documents'), 'Codex Projects', 'SnipPilotSnips');
 }
 
 function configPath() {
@@ -362,9 +363,81 @@ function createScrollFrameWindow(rect) {
   scrollFrameWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   scrollFrameWindow.setContentProtection(true);
   scrollFrameWindow.loadFile(path.join(__dirname, 'renderer', 'scroll-frame.html'));
-  scrollFrameWindow.webContents.once('did-finish-load', () => {
-    sendScrollFrameState('Initial view captured. Scroll, then drag the bottom edge down or top edge up to add the next view.');
+}
+
+function createScrollControlsWindow(rect) {
+  if (scrollControlsWindow && !scrollControlsWindow.isDestroyed()) {
+    scrollControlsWindow.close();
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const bounds = primaryDisplay.bounds;
+  const width = 520;
+  const height = 94;
+  const x = Math.round(Math.min(
+    Math.max(bounds.x + rect.left + rect.width - width, bounds.x + 12),
+    bounds.x + bounds.width - width - 12
+  ));
+  const belowY = bounds.y + rect.top + rect.height + 12;
+  const aboveY = bounds.y + rect.top - height - 12;
+  const y = Math.round(belowY + height <= bounds.y + bounds.height - 12 ? belowY : Math.max(bounds.y + 12, aboveY));
+
+  scrollControlsWindow = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    minWidth: width,
+    minHeight: height,
+    maxWidth: width,
+    maxHeight: height,
+    fullscreenable: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
+    }
   });
+
+  hardenWindow(scrollControlsWindow);
+  scrollControlsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  scrollControlsWindow.setContentProtection(true);
+  scrollControlsWindow.loadFile(path.join(__dirname, 'renderer', 'scroll-controls.html'));
+  scrollControlsWindow.webContents.once('did-finish-load', () => {
+    sendScrollFrameState('Initial view captured. Scroll, then click Add below or Add above.');
+  });
+}
+
+function closeScrollWindows() {
+  if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) {
+    scrollFrameWindow.close();
+    scrollFrameWindow = null;
+  }
+  if (scrollControlsWindow && !scrollControlsWindow.isDestroyed()) {
+    scrollControlsWindow.close();
+    scrollControlsWindow = null;
+  }
+}
+
+function showScrollWindows() {
+  if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) {
+    scrollFrameWindow.showInactive();
+    scrollFrameWindow.moveTop();
+  }
+  if (scrollControlsWindow && !scrollControlsWindow.isDestroyed()) {
+    scrollControlsWindow.show();
+    scrollControlsWindow.moveTop();
+    scrollControlsWindow.focus();
+  }
 }
 
 function createEditorWindow(record) {
@@ -701,17 +774,18 @@ async function startManualScrollCapture(rect) {
 
   if (shelfWindow && !shelfWindow.isDestroyed()) shelfWindow.hide();
   createScrollFrameWindow(rect);
+  createScrollControlsWindow(rect);
   await captureScrollFrame();
-  sendScrollFrameState('Initial view captured. Scroll, then drag the bottom edge down or top edge up to add the next view.');
+  sendScrollFrameState('Initial view captured. Scroll, then click Add below or Add above.');
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('app:status', 'Scroll capture running. Scroll, then drag the top or bottom edge to add a view. Press Cmd+2 to finish.');
+    mainWindow.webContents.send('app:status', 'Scroll capture running. Scroll, then click Add below or Add above. Press Cmd+2 to finish.');
   }
 }
 
 function sendScrollFrameState(message = '') {
-  if (!scrollFrameWindow || scrollFrameWindow.isDestroyed()) return;
+  if (!scrollControlsWindow || scrollControlsWindow.isDestroyed()) return;
   const count = activeScrollSession?.framePaths?.length || 0;
-  scrollFrameWindow.webContents.send('scroll:state', {
+  scrollControlsWindow.webContents.send('scroll:state', {
     count,
     direction: activeScrollSession?.direction || null,
     message
@@ -724,13 +798,14 @@ async function captureScrollFrame() {
   session.capturing = true;
   try {
     if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) scrollFrameWindow.hide();
+    if (scrollControlsWindow && !scrollControlsWindow.isDestroyed()) scrollControlsWindow.hide();
     await sleep(60);
     const framePath = path.join(session.tempDir, `frame-${String(session.framePaths.length).padStart(3, '0')}.png`);
     await captureRegionToFile(session.rect, framePath);
     session.framePaths.push(framePath);
     return framePath;
   } finally {
-    if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) scrollFrameWindow.showInactive();
+    showScrollWindows();
     session.capturing = false;
   }
 }
@@ -761,10 +836,7 @@ async function cancelManualScrollCapture() {
   if (!session) return { ok: true };
   clearInterval(session.timer);
   activeScrollSession = null;
-  if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) {
-    scrollFrameWindow.close();
-    scrollFrameWindow = null;
-  }
+  closeScrollWindows();
   await fs.rm(session.tempDir, { recursive: true, force: true });
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('app:status', 'Scrolling snip cancelled.');
@@ -782,10 +854,7 @@ async function finishManualScrollCapture() {
   try {
     while (session.capturing) await sleep(50);
     session.finishing = true;
-    if (scrollFrameWindow && !scrollFrameWindow.isDestroyed()) {
-      scrollFrameWindow.close();
-      scrollFrameWindow = null;
-    }
+    closeScrollWindows();
     await stitchScrollFrames(session.framePaths, session.outputPath, session.direction);
     const metadata = await recordFromPath('pending', session.outputPath);
     await refreshSnipViews();
@@ -961,12 +1030,6 @@ ipcMain.on('overlay:scroll-region', (_event, payload) => {
   })().catch((error) => {
     dialog.showErrorBox('Scroll capture failed', `${error.message}\n\nScrolling capture records the selected region only when you drag the top or bottom edge, then stitches those selected views when you press Cmd+2 or Done.`);
   });
-});
-
-ipcMain.on('scroll-frame:interactive', (_event, active) => {
-  if (!scrollFrameWindow || scrollFrameWindow.isDestroyed()) return;
-  if (active) scrollFrameWindow.setIgnoreMouseEvents(false);
-  else scrollFrameWindow.setIgnoreMouseEvents(true, { forward: true });
 });
 
 ipcMain.handle('scroll:capture-segment', (_event, direction) => captureScrollSegment(direction));

@@ -6,8 +6,8 @@ Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick 
 
 Download the unsigned macOS build:
 
-- [SnipPilot-0.2.0-arm64.dmg](downloads/SnipPilot-0.2.0-arm64.dmg)
-- [SHA-256 checksum](downloads/SnipPilot-0.2.0-arm64.dmg.sha256)
+- [SnipPilot-0.2.1-arm64.dmg](downloads/SnipPilot-0.2.1-arm64.dmg)
+- [SHA-256 checksum](downloads/SnipPilot-0.2.1-arm64.dmg.sha256)
 
 This build is for Apple Silicon Macs. Because it is not Apple Developer ID signed, macOS may require right-clicking the app and choosing Open on first launch.
 
@@ -22,7 +22,7 @@ This build is for Apple Silicon Macs. Because it is not Apple Developer ID signe
 - Text entry directly on the snip canvas.
 - Object-aware eraser for removing annotations without damaging screenshot pixels.
 - Auto-copy to clipboard when the editor is closed.
-- Edge-driven scrolling capture: select a region, scroll the page, then drag the top or bottom edge to add each view before stitching.
+- Controlled scrolling capture: select a region, scroll the page, then click `Add above`, `Add below`, or `Auto capture` before stitching.
 - Scroll stitching detects up/down movement and removes repeated stable headers or footers when it can identify them.
 - First-run local setup for choosing the storage folder and global shortcut.
 - Clean local library grouped by date with filters for all, today, week, and month.
@@ -33,7 +33,7 @@ This build is for Apple Silicon Macs. Because it is not Apple Developer ID signe
 Snips are stored in a single local folder:
 
 ```text
-~/Documents/SnipPilotSnips/
+~/Documents/Codex Projects/SnipPilotSnips/
   Pending/
   Copied/
 ```
@@ -71,7 +71,7 @@ The app keeps this configuration in the local macOS application support folder. 
 - Network requests are blocked except local `file:`, `data:`, and developer-tool URLs.
 - Clipboard writes are local macOS clipboard writes. Other local apps with clipboard access may be able to read copied images.
 - Screen Recording permission is required by macOS for screenshot apps.
-- Scrolling capture does not control the target app. You scroll manually, then explicitly add each view by dragging the selected top or bottom edge.
+- Scrolling capture does not control the target app. You scroll manually, then explicitly add each view from the floating Snip Pilot controls.
 - Snips are not encrypted at rest. Anyone with access to your macOS account or backups that include the storage folder may be able to read them.
 
 ## Install And Run
@@ -116,8 +116,8 @@ For scrolling capture:
 1. Press `Cmd+2` twice quickly or click `Scroll snip`.
 2. Drag the visible region you want to capture.
 3. Scroll the target app/window normally.
-4. Drag the bottom edge downward to add the current view below, or drag the top edge upward to add the current view above.
-5. Repeat scroll-and-drag until you have the full capture, then press `Cmd+2` or click `Done`.
+4. Click `Add below` to add the current view below, or `Add above` to add the current view above.
+5. Repeat scroll-and-add until you have the full capture, or click `Auto capture` and scroll slowly until ready.
 6. The stitched image appears as a pending snip.
 
 If you start near the top and scroll down, the final image is ordered top-to-bottom. If you start near the bottom and scroll up, the final image keeps the bottom content at the bottom.
