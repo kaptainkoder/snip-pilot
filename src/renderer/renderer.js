@@ -275,5 +275,5 @@ window.snipPilot.onConfig(applyConfigInfo);
 
 window.snipPilot.getInfo().then(applyConfigInfo);
 
-refreshLibrary(false);
+refreshLibrary(true);
 setActionState();

@@ -15,6 +15,7 @@ let editorWindow;
 let scrollFrameWindow;
 let scrollControlsWindow;
 let editorForceClose = false;
+let shelfReady = false;
 let tray;
 let shortcutRegistered = false;
 let lastShortcutAt = 0;
@@ -299,7 +300,9 @@ function createOverlayWindow(capture, mode = 'snip') {
 
 function createShelfWindow() {
   const { bounds } = screen.getPrimaryDisplay();
+  shelfReady = false;
   shelfWindow = new BrowserWindow({
+    title: 'Snip Shelf',
     x: bounds.x + 12,
     y: bounds.y + 92,
     width: 340,
@@ -314,6 +317,7 @@ function createShelfWindow() {
     skipTaskbar: true,
     show: false,
     hasShadow: false,
+    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -325,7 +329,23 @@ function createShelfWindow() {
 
   hardenWindow(shelfWindow);
   shelfWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  shelfWindow.setAlwaysOnTop(true, 'floating');
   shelfWindow.loadFile(path.join(__dirname, 'renderer', 'shelf.html'));
+  shelfWindow.webContents.once('did-finish-load', async () => {
+    shelfReady = true;
+    await refreshSnipViews();
+  });
+  shelfWindow.on('closed', () => {
+    shelfWindow = null;
+    shelfReady = false;
+  });
+}
+
+function showShelfWindow() {
+  if (!shelfWindow || shelfWindow.isDestroyed()) return;
+  shelfWindow.setAlwaysOnTop(true, 'floating');
+  shelfWindow.showInactive();
+  shelfWindow.moveTop();
 }
 
 function createScrollFrameWindow(rect) {
@@ -443,6 +463,9 @@ function showScrollWindows() {
 function createEditorWindow(record) {
   if (editorWindow && !editorWindow.isDestroyed()) {
     editorWindow.close();
+  }
+  if (shelfWindow && !shelfWindow.isDestroyed()) {
+    shelfWindow.hide();
   }
   editorForceClose = false;
 
@@ -915,8 +938,8 @@ async function refreshSnipViews() {
   const snips = await listSnips();
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('library:snips', snips);
   if (shelfWindow && !shelfWindow.isDestroyed()) {
-    shelfWindow.webContents.send('shelf:snips', snips.pending);
-    if (snips.pending.length) shelfWindow.showInactive();
+    if (shelfReady) shelfWindow.webContents.send('shelf:snips', snips.pending);
+    if (snips.pending.length) showShelfWindow();
     else shelfWindow.hide();
   }
   return snips;
