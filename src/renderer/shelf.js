@@ -1,4 +1,5 @@
 const shelf = document.getElementById('shelf');
+let renderToken = 0;
 
 function makeButton(label, className, onClick) {
   const button = document.createElement('button');
@@ -12,8 +13,22 @@ function makeButton(label, className, onClick) {
 }
 
 async function renderSnips(snips) {
-  shelf.innerHTML = '';
-  for (const snip of snips.slice(0, 6)) {
+  const token = ++renderToken;
+  const entries = await Promise.all(snips.slice(0, 6).map(async (snip) => {
+    try {
+      return {
+        snip,
+        dataUrl: await window.snipPilot.loadSnipImage(snip.imagePath)
+      };
+    } catch {
+      return null;
+    }
+  }));
+  if (token !== renderToken) return;
+
+  const fragment = document.createDocumentFragment();
+  for (const entry of entries.filter(Boolean)) {
+    const { snip, dataUrl } = entry;
     const item = document.createElement('article');
     item.className = 'snip';
     item.addEventListener('click', () => window.snipPilot.openEditor({ id: snip.id, bucket: 'pending' }));
@@ -21,14 +36,14 @@ async function renderSnips(snips) {
     const close = makeButton('x', 'close', () => window.snipPilot.savePending(snip.id));
     close.title = 'Move to Copied';
 
-    const dataUrl = await window.snipPilot.loadSnipImage(snip.imagePath);
     const image = document.createElement('img');
     image.alt = snip.title || 'Pending snip';
     image.src = dataUrl;
 
     item.append(close, image);
-    shelf.appendChild(item);
+    fragment.appendChild(item);
   }
+  shelf.replaceChildren(fragment);
 }
 
 window.snipPilot.onShelfSnips(renderSnips);
