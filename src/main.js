@@ -1,4 +1,4 @@
-const { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, screen, clipboard, nativeImage, dialog, Menu, Tray, session, shell } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, screen, clipboard, nativeImage, dialog, Menu, Tray, session, shell, systemPreferences } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs/promises');
 const path = require('path');
@@ -15,7 +15,6 @@ let editorWindow;
 let scrollFrameWindow;
 let scrollControlsWindow;
 let editorForceClose = false;
-let shelfReady = false;
 let tray;
 let shortcutRegistered = false;
 let lastShortcutAt = 0;
@@ -187,29 +186,43 @@ function createMainWindow() {
 
 async function capturePrimaryDisplay() {
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.size;
   const scaleFactor = primaryDisplay.scaleFactor || 1;
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: {
-      width: Math.round(width * scaleFactor),
-      height: Math.round(height * scaleFactor)
-    }
-  });
+  const { width, height } = primaryDisplay.bounds;
+  const outputPath = path.join(os.tmpdir(), `snip-pilot-display-${timestamp()}.png`);
+  const region = [0, 0, width, height].map((value) => Math.max(0, Math.round(value * scaleFactor))).join(',');
 
-  const source = sources.find((item) => item.display_id === String(primaryDisplay.id)) || sources[0];
-  if (!source) {
-    throw new Error('No display source was available. macOS may need Screen Recording permission for this app.');
+  try {
+    await runFile('/usr/sbin/screencapture', ['-x', '-t', 'png', '-R', region, outputPath]);
+    const image = nativeImage.createFromPath(outputPath);
+    if (image.isEmpty()) {
+      throw new Error('macOS returned an empty display capture.');
+    }
+
+    return {
+      dataUrl: image.toDataURL(),
+      display: {
+        bounds: primaryDisplay.bounds,
+        size: primaryDisplay.size,
+        scaleFactor
+      }
+    };
+  } finally {
+    await fs.unlink(outputPath).catch(() => {});
   }
+}
 
-  return {
-    dataUrl: source.thumbnail.toDataURL(),
-    display: {
-      bounds: primaryDisplay.bounds,
-      size: primaryDisplay.size,
-      scaleFactor
-    }
-  };
+function screenRecordingStatus() {
+  if (!isMac || !systemPreferences?.getMediaAccessStatus) return 'granted';
+  return systemPreferences.getMediaAccessStatus('screen');
+}
+
+function screenRecordingHelp(action) {
+  const status = screenRecordingStatus();
+  return [
+    `${action} needs macOS Screen Recording access for Snip Pilot.`,
+    `macOS currently reports Screen Recording status: ${status}.`,
+    'Open System Settings > Privacy & Security > Screen & System Audio Recording, enable Snip Pilot, then fully quit and reopen Snip Pilot.'
+  ].join('\n\n');
 }
 
 async function startSnip() {
@@ -233,7 +246,7 @@ async function startSnip() {
     }
     return { ok: true, metadata };
   } catch (error) {
-    const message = `${error.message}\n\nThis build uses macOS native screencapture. If it still fails, quit and reopen Snip Pilot after granting Screen Recording permission.`;
+    const message = `${error.message}\n\n${screenRecordingHelp('Taking a snip')}`;
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:status', `Capture failed: ${error.message}`);
     dialog.showErrorBox('Capture failed', message);
     return { ok: false, error: error.message };
@@ -246,7 +259,7 @@ async function startScrollSnip() {
     createOverlayWindow(capture, 'scroll');
     return { ok: true };
   } catch (error) {
-    const message = `${error.message}\n\nScrolling capture needs Screen Recording permission for the region picker.`;
+    const message = `${error.message}\n\n${screenRecordingHelp('Scrolling snip')}`;
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:status', `Scroll snip failed: ${error.message}`);
     dialog.showErrorBox('Scroll capture failed', message);
     return { ok: false, error: error.message };
@@ -300,9 +313,7 @@ function createOverlayWindow(capture, mode = 'snip') {
 
 function createShelfWindow() {
   const { bounds } = screen.getPrimaryDisplay();
-  shelfReady = false;
   shelfWindow = new BrowserWindow({
-    title: 'Snip Shelf',
     x: bounds.x + 12,
     y: bounds.y + 92,
     width: 340,
@@ -317,7 +328,6 @@ function createShelfWindow() {
     skipTaskbar: true,
     show: false,
     hasShadow: false,
-    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -329,22 +339,14 @@ function createShelfWindow() {
 
   hardenWindow(shelfWindow);
   shelfWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  shelfWindow.setAlwaysOnTop(true, 'floating');
   shelfWindow.loadFile(path.join(__dirname, 'renderer', 'shelf.html'));
-  shelfWindow.webContents.once('did-finish-load', async () => {
-    shelfReady = true;
-    await refreshSnipViews();
-  });
-  shelfWindow.on('closed', () => {
-    shelfWindow = null;
-    shelfReady = false;
-  });
 }
 
 function showShelfWindow() {
   if (!shelfWindow || shelfWindow.isDestroyed()) return;
   shelfWindow.setAlwaysOnTop(true, 'floating');
   shelfWindow.showInactive();
+  if (!shelfWindow.isVisible()) shelfWindow.show();
   shelfWindow.moveTop();
 }
 
@@ -464,9 +466,6 @@ function createEditorWindow(record) {
   if (editorWindow && !editorWindow.isDestroyed()) {
     editorWindow.close();
   }
-  if (shelfWindow && !shelfWindow.isDestroyed()) {
-    shelfWindow.hide();
-  }
   editorForceClose = false;
 
   editorWindow = new BrowserWindow({
@@ -528,8 +527,11 @@ async function saveDataUrl(filePath, dataUrl) {
 
 function runFile(command, args) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, (error) => {
-      if (error) reject(error);
+    execFile(command, args, (error, _stdout, stderr) => {
+      if (error) {
+        error.message = [error.message, stderr].filter(Boolean).join('\n');
+        reject(error);
+      }
       else resolve();
     });
   });
@@ -938,7 +940,7 @@ async function refreshSnipViews() {
   const snips = await listSnips();
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('library:snips', snips);
   if (shelfWindow && !shelfWindow.isDestroyed()) {
-    if (shelfReady) shelfWindow.webContents.send('shelf:snips', snips.pending);
+    shelfWindow.webContents.send('shelf:snips', snips.pending);
     if (snips.pending.length) showShelfWindow();
     else shelfWindow.hide();
   }
