@@ -4,12 +4,11 @@ Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick 
 
 ## Download
 
-Download the unsigned macOS build:
+Download the latest Apple Silicon macOS build from GitHub Releases:
 
-- [SnipPilot-0.2.1-arm64.dmg](downloads/SnipPilot-0.2.1-arm64.dmg)
-- [SHA-256 checksum](downloads/SnipPilot-0.2.1-arm64.dmg.sha256)
+- [Latest Snip Pilot release](https://github.com/kaptainkoder/SnipPilot---macOS/releases/latest)
 
-This build is for Apple Silicon Macs. Because it is not Apple Developer ID signed, macOS may require right-clicking the app and choosing Open on first launch.
+The DMG is ad-hoc signed for a stable local app identity, but it is not Apple Developer ID notarized. macOS may require right-clicking the app and choosing Open on first launch.
 
 ## Features
 
@@ -70,7 +69,9 @@ The app keeps this configuration in the local macOS application support folder. 
 - Renderer permission requests are denied.
 - Network requests are blocked except local `file:`, `data:`, and developer-tool URLs.
 - Clipboard writes are local macOS clipboard writes. Other local apps with clipboard access may be able to read copied images.
-- Screen Recording permission is required by macOS for screenshot apps.
+- Screen & System Audio Recording permission is required by macOS for screenshot apps. Snip Pilot does not record audio; the permission name is controlled by macOS.
+- The app bundle identity is `local.snippilot.app`. If macOS previously listed this project as `Electron`, remove or ignore that old entry and grant permission to `Snip Pilot.app`.
+- Replacing an ad-hoc signed local build can make macOS ask for Screen & System Audio Recording again. Grant the permission once after installing the final app build you plan to use.
 - Scrolling capture does not control the target app. You scroll manually, then explicitly add each view from the floating Snip Pilot controls.
 - Snips are not encrypted at rest. Anyone with access to your macOS account or backups that include the storage folder may be able to read them.
 
@@ -90,7 +91,7 @@ npm run pack
 The packaged macOS app is created under:
 
 ```text
-release/mac-arm64/Snip Pilot.app
+release/signed-mac-arm64/Snip Pilot.app
 ```
 
 To build a shareable DMG:
@@ -99,7 +100,7 @@ To build a shareable DMG:
 npm run dist
 ```
 
-The unsigned DMG is created under `release/`. Because this project is not Apple Developer ID signed, macOS may require right-clicking the app and choosing Open on first launch.
+The DMG is created under `release/` and copied into `downloads/` with a SHA-256 checksum. DMGs are published as GitHub Release assets instead of normal Git-tracked files because current builds can exceed GitHub's 100 MB file limit.
 
 ## Use It
 
