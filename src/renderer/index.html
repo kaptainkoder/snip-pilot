@@ -13,6 +13,11 @@
         <div>
           <h1>Snip Pilot</h1>
           <p id="status">Local snip storage is ready.</p>
+          <div class="health" id="healthRow">
+            <span class="chip" id="chipShortcut">Shortcut: …</span>
+            <span class="chip" id="chipScreen">Screen Recording: …</span>
+            <button id="openScreenSettingsBtn" class="chipAction" type="button" hidden>Open Settings</button>
+          </div>
         </div>
         <div class="commands">
           <button id="captureBtn" class="primary">New snip</button>
@@ -46,6 +51,16 @@
             <option value="Command+Shift+2">Cmd+Shift+2</option>
             <option value="Command+Option+2">Cmd+Option+2</option>
             <option value="Command+Shift+5">Cmd+Shift+5</option>
+          </select>
+        </label>
+        <label>
+          <span>Clear clipboard after copy</span>
+          <select id="clipboardClearInput">
+            <option value="0">Never (default)</option>
+            <option value="1">After 1 minute</option>
+            <option value="5">After 5 minutes</option>
+            <option value="15">After 15 minutes</option>
+            <option value="60">After 60 minutes</option>
           </select>
         </label>
         <button id="saveSettingsBtn" class="primary" type="button">Save setup</button>

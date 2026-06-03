@@ -15,6 +15,10 @@ const storageInput = document.getElementById('storageInput');
 const shortcutInput = document.getElementById('shortcutInput');
 const chooseFolderBtn = document.getElementById('chooseFolderBtn');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const clipboardClearInput = document.getElementById('clipboardClearInput');
+const chipShortcut = document.getElementById('chipShortcut');
+const chipScreen = document.getElementById('chipScreen');
+const openScreenSettingsBtn = document.getElementById('openScreenSettingsBtn');
 
 let currentSnip = null;
 let currentBucket = null;
@@ -77,13 +81,28 @@ function setActionState() {
   discardBtn.disabled = !isPending;
 }
 
+function renderHealth(info) {
+  const shortcutOk = Boolean(info.shortcutRegistered);
+  chipShortcut.textContent = `Shortcut ${info.shortcut} ${shortcutOk ? '✓' : '✗'}`;
+  chipShortcut.classList.toggle('ok', shortcutOk);
+  chipShortcut.classList.toggle('bad', !shortcutOk);
+
+  const screenOk = !info.screenRecording || info.screenRecording === 'granted';
+  chipScreen.textContent = `Screen Recording ${screenOk ? '✓' : '✗'}`;
+  chipScreen.classList.toggle('ok', screenOk);
+  chipScreen.classList.toggle('bad', !screenOk);
+  openScreenSettingsBtn.hidden = screenOk;
+}
+
 function applyConfigInfo(info) {
   shortcutText.textContent = info.shortcut;
   storagePath.textContent = info.captureDir;
   storageInput.value = info.captureDir;
   shortcutInput.value = info.shortcut;
+  if (typeof info.clipboardClearMinutes === 'number') clipboardClearInput.value = String(info.clipboardClearMinutes);
   setupRequired = Boolean(info.setupRequired);
   setupPanel.hidden = !setupRequired && setupPanel.hidden;
+  renderHealth(info);
   setStatus(info.shortcutRegistered
     ? `Ready. Press ${info.shortcut} anywhere while Snip Pilot is running.`
     : `Ready, but ${info.shortcut} could not be registered. Choose another shortcut in Settings.`);
@@ -199,10 +218,13 @@ chooseFolderBtn.addEventListener('click', async () => {
   if (selected) storageInput.value = selected;
 });
 
+openScreenSettingsBtn.addEventListener('click', () => window.snipPilot.openScreenSettings());
+
 saveSettingsBtn.addEventListener('click', async () => {
   const info = await window.snipPilot.updateConfig({
     storageDir: storageInput.value,
-    shortcut: shortcutInput.value
+    shortcut: shortcutInput.value,
+    clipboardClearMinutes: Number(clipboardClearInput.value)
   });
   setupPanel.hidden = true;
   applyConfigInfo(info);

@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('snipPilot', {
   getInfo: () => ipcRenderer.invoke('app:get-info'),
+  openScreenSettings: () => ipcRenderer.invoke('app:open-screen-settings'),
   chooseStorageDir: () => ipcRenderer.invoke('app:choose-storage-dir'),
   updateConfig: (payload) => ipcRenderer.invoke('app:update-config', payload),
   quit: () => ipcRenderer.invoke('app:quit'),
