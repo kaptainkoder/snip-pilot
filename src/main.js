@@ -1,9 +1,10 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, screen, clipboard, nativeImage, dialog, Menu, Tray, session, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, screen, clipboard, nativeImage, dialog, Menu, Tray, session, shell, systemPreferences, powerMonitor } = require('electron');
 const { execFile } = require('child_process');
+const https = require('https');
 const fs = require('fs/promises');
 const path = require('path');
 const os = require('os');
-const { Jimp, rgbaToInt } = require('jimp');
+const { stitchScrollFrames } = require('./scroll-stitch');
 
 const isMac = process.platform === 'darwin';
 const defaultShortcut = 'Command+2';
@@ -16,6 +17,7 @@ let scrollFrameWindow;
 let scrollControlsWindow;
 let editorForceClose = false;
 let tray;
+let shelfWatchdog = null;
 let shortcutRegistered = false;
 let lastShortcutAt = 0;
 let shortcutModeTimer = null;
@@ -28,8 +30,10 @@ let copiedDir;
 let appConfig = {
   configured: false,
   shortcut: defaultShortcut,
-  storageDir: null
+  storageDir: null,
+  clipboardClearMinutes: 0
 };
+let clipboardClearTimer = null;
 
 function handleCaptureShortcut() {
   if (activeScrollSession) {
@@ -77,7 +81,8 @@ function applyConfig(config) {
   appConfig = {
     configured: Boolean(config.configured),
     shortcut: config.shortcut || defaultShortcut,
-    storageDir: config.storageDir || defaultCaptureDir()
+    storageDir: config.storageDir || defaultCaptureDir(),
+    clipboardClearMinutes: Number.isFinite(Number(config.clipboardClearMinutes)) ? Math.max(0, Number(config.clipboardClearMinutes)) : 0
   };
   shortcut = appConfig.shortcut;
   captureDir = appConfig.storageDir;
@@ -89,7 +94,8 @@ async function loadConfig() {
   const fallback = {
     configured: false,
     shortcut: defaultShortcut,
-    storageDir: defaultCaptureDir()
+    storageDir: defaultCaptureDir(),
+    clipboardClearMinutes: 0
   };
   try {
     const data = JSON.parse(await fs.readFile(configPath(), 'utf8'));
@@ -122,12 +128,29 @@ function appInfo() {
     setupRequired: !appConfig.configured,
     captureDir,
     pendingDir,
-    copiedDir
+    copiedDir,
+    clipboardClearMinutes: appConfig.clipboardClearMinutes,
+    screenRecording: screenRecordingStatus()
   };
 }
 
 function notifyConfig() {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:config', appInfo());
+}
+
+// If the user enabled clipboard auto-clear, wipe the system clipboard after the
+// configured number of minutes. Best-effort: a later copy reschedules this.
+function scheduleClipboardClear() {
+  if (clipboardClearTimer) {
+    clearTimeout(clipboardClearTimer);
+    clipboardClearTimer = null;
+  }
+  const minutes = Number(appConfig.clipboardClearMinutes) || 0;
+  if (minutes <= 0) return;
+  clipboardClearTimer = setTimeout(() => {
+    clipboardClearTimer = null;
+    try { clipboard.clear(); } catch { /* clipboard may be unavailable */ }
+  }, minutes * 60_000);
 }
 
 function registerCaptureShortcut() {
@@ -136,6 +159,9 @@ function registerCaptureShortcut() {
   registeredShortcut = shortcutRegistered ? shortcut : null;
   if (!shortcutRegistered) {
     console.error(`Failed to register shortcut ${shortcut}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:status', `Could not register the ${shortcut} shortcut — another app may already use it. Pick a different shortcut in Settings.`);
+    }
   }
   notifyConfig();
   return shortcutRegistered;
@@ -255,6 +281,14 @@ async function startSnip() {
 
 async function startScrollSnip() {
   try {
+    const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const primary = screen.getPrimaryDisplay();
+    if (cursorDisplay.id !== primary.id) {
+      const message = 'Scrolling snip currently supports your primary display only. Move the window you want to capture to the main display, then try again.';
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:status', message);
+      dialog.showMessageBox({ type: 'info', title: 'Scrolling snip', message: 'Primary display only', detail: message });
+      return { ok: false, error: message };
+    }
     const capture = await capturePrimaryDisplay();
     createOverlayWindow(capture, 'scroll');
     return { ok: true };
@@ -312,12 +346,10 @@ function createOverlayWindow(capture, mode = 'snip') {
 }
 
 function createShelfWindow() {
-  const { bounds } = screen.getPrimaryDisplay();
+  const { workArea } = screen.getPrimaryDisplay();
+  const shelfBounds = shelfWindowBounds(workArea);
   shelfWindow = new BrowserWindow({
-    x: bounds.x + 12,
-    y: bounds.y + 92,
-    width: 340,
-    height: Math.min(680, bounds.height - 160),
+    ...shelfBounds,
     minWidth: 340,
     maxWidth: 340,
     frame: false,
@@ -338,16 +370,68 @@ function createShelfWindow() {
   });
 
   hardenWindow(shelfWindow);
-  shelfWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  shelfWindow.setContentProtection(true);
+  keepShelfAvailableOnCurrentWorkspace();
   shelfWindow.loadFile(path.join(__dirname, 'renderer', 'shelf.html'));
+}
+
+function shelfWindowBounds(workArea) {
+  const width = 340;
+  const height = Math.max(220, Math.min(680, workArea.height - 48));
+  return {
+    x: workArea.x + 12,
+    y: workArea.y + 24,
+    width,
+    height
+  };
+}
+
+function keepShelfAvailableOnCurrentWorkspace(reposition = false) {
+  if (!shelfWindow || shelfWindow.isDestroyed()) return;
+  if (reposition || !shelfWindow.isVisible()) {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    shelfWindow.setBounds(shelfWindowBounds(display.workArea), false);
+  }
+  shelfWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  shelfWindow.setAlwaysOnTop(false);
+  shelfWindow.setAlwaysOnTop(true, 'screen-saver');
 }
 
 function showShelfWindow() {
   if (!shelfWindow || shelfWindow.isDestroyed()) return;
-  shelfWindow.setAlwaysOnTop(true, 'floating');
-  shelfWindow.showInactive();
+  keepShelfAvailableOnCurrentWorkspace(true);
   if (!shelfWindow.isVisible()) shelfWindow.show();
+  else shelfWindow.showInactive();
   shelfWindow.moveTop();
+}
+
+function startShelfWatchdog() {
+  if (shelfWatchdog) return;
+  shelfWatchdog = setInterval(() => {
+    if (shelfWindow && !shelfWindow.isDestroyed() && shelfWindow.isVisible()) {
+      keepShelfAvailableOnCurrentWorkspace();
+      shelfWindow.moveTop();
+    }
+  }, 3000);
+}
+
+function stopShelfWatchdog() {
+  if (!shelfWatchdog) return;
+  clearInterval(shelfWatchdog);
+  shelfWatchdog = null;
+}
+
+async function reassertShelfWindow() {
+  const snips = await listSnips().catch(() => null);
+  if (snips?.pending?.length) showShelfWindow();
+}
+
+function reassertShelfWindowSoon() {
+  for (const delay of [100, 750, 2000]) {
+    setTimeout(() => {
+      reassertShelfWindow().catch(() => {});
+    }, delay);
+  }
 }
 
 function createScrollFrameWindow(rect) {
@@ -486,6 +570,7 @@ function createEditorWindow(record) {
   });
 
   hardenWindow(editorWindow);
+  editorWindow.setContentProtection(true);
   editorWindow.loadFile(path.join(__dirname, 'renderer', 'editor.html'));
   editorWindow.webContents.once('did-finish-load', async () => {
     editorWindow.webContents.send('editor:init', {
@@ -544,239 +629,6 @@ async function captureRegionToFile(rect, filePath) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function pixelDifference(previous, xA, yA, next, xB, yB) {
-  const previousIndex = (previous.bitmap.width * yA + xA) * 4;
-  const nextIndex = (next.bitmap.width * yB + xB) * 4;
-  const previousData = previous.bitmap.data;
-  const nextData = next.bitmap.data;
-  return (
-    Math.abs(previousData[previousIndex] - nextData[nextIndex]) +
-    Math.abs(previousData[previousIndex + 1] - nextData[nextIndex + 1]) +
-    Math.abs(previousData[previousIndex + 2] - nextData[nextIndex + 2])
-  ) / 3;
-}
-
-function rowDifference(previous, next, overlap, sampleStep, direction, previousCrop, nextCrop) {
-  const width = Math.min(previous.bitmap.width, next.bitmap.width);
-  let diff = 0;
-  let count = 0;
-  for (let y = 0; y < overlap; y += sampleStep) {
-    for (let x = 0; x < width; x += sampleStep) {
-      const previousY = direction === 'up'
-        ? previousCrop.top + y
-        : previous.bitmap.height - previousCrop.bottom - overlap + y;
-      const nextY = direction === 'up'
-        ? next.bitmap.height - nextCrop.bottom - overlap + y
-        : nextCrop.top + y;
-      diff += pixelDifference(previous, x, previousY, next, x, nextY);
-      count += 1;
-    }
-  }
-  return count ? diff / count : Number.MAX_VALUE;
-}
-
-function frameDifference(previous, next) {
-  const width = Math.min(previous.bitmap.width, next.bitmap.width);
-  const height = Math.min(previous.bitmap.height, next.bitmap.height);
-  const sampleStep = Math.max(10, Math.floor(width / 80));
-  let diff = 0;
-  let count = 0;
-  for (let y = 0; y < height; y += sampleStep) {
-    for (let x = 0; x < width; x += sampleStep) {
-      diff += pixelDifference(previous, x, y, next, x, y);
-      count += 1;
-    }
-  }
-  return count ? diff / count : 0;
-}
-
-function rowDifferenceAt(previous, next, previousY, nextY, sampleStep) {
-  const width = Math.min(previous.bitmap.width, next.bitmap.width);
-  let diff = 0;
-  let count = 0;
-  for (let x = 0; x < width; x += sampleStep) {
-    diff += pixelDifference(previous, x, previousY, next, x, nextY);
-    count += 1;
-  }
-  return count ? diff / count : Number.MAX_VALUE;
-}
-
-function detectStableEdge(previous, next, edge) {
-  const height = Math.min(previous.bitmap.height, next.bitmap.height);
-  const maxBand = Math.min(160, Math.floor(height * 0.24));
-  const sampleStep = Math.max(8, Math.floor(Math.min(previous.bitmap.width, next.bitmap.width) / 90));
-  let band = 0;
-  let misses = 0;
-
-  for (let offset = 0; offset < maxBand; offset += 4) {
-    const previousY = edge === 'top' ? offset : previous.bitmap.height - 1 - offset;
-    const nextY = edge === 'top' ? offset : next.bitmap.height - 1 - offset;
-    const score = rowDifferenceAt(previous, next, previousY, nextY, sampleStep);
-    if (score <= 8) {
-      band = offset + 4;
-      misses = 0;
-    } else {
-      misses += 1;
-      if (misses >= 2) break;
-    }
-  }
-
-  return band >= Math.min(16, Math.floor(height * 0.1)) ? band : 0;
-}
-
-function detectStableEdges(previous, next) {
-  return {
-    top: detectStableEdge(previous, next, 'top'),
-    bottom: detectStableEdge(previous, next, 'bottom')
-  };
-}
-
-function clampCrop(frame, crop) {
-  const maxCrop = Math.max(0, frame.bitmap.height - 1);
-  let top = Math.max(0, Math.min(crop.top, maxCrop));
-  let bottom = Math.max(0, Math.min(crop.bottom, maxCrop));
-  if (top + bottom > maxCrop) {
-    const scale = maxCrop / (top + bottom);
-    top = Math.floor(top * scale);
-    bottom = Math.floor(bottom * scale);
-  }
-  return { top, bottom };
-}
-
-function contentHeight(frame, crop) {
-  return Math.max(1, frame.bitmap.height - crop.top - crop.bottom);
-}
-
-function findOverlap(previous, next, direction, previousCrop = { top: 0, bottom: 0 }, nextCrop = { top: 0, bottom: 0 }) {
-  const available = Math.min(contentHeight(previous, previousCrop), contentHeight(next, nextCrop));
-  const maxOverlap = Math.max(1, Math.floor(available * 0.92));
-  const minOverlap = Math.max(1, Math.floor(available * 0.05));
-  const sampleStep = Math.max(8, Math.floor(Math.min(previous.bitmap.width, next.bitmap.width) / 90));
-  let bestOverlap = minOverlap;
-  let bestScore = Number.MAX_VALUE;
-  for (let overlap = minOverlap; overlap <= maxOverlap; overlap += sampleStep) {
-    const score = rowDifference(previous, next, overlap, sampleStep, direction, previousCrop, nextCrop);
-    if (score < bestScore) {
-      bestScore = score;
-      bestOverlap = overlap;
-    }
-  }
-  return { overlap: bestOverlap, score: bestScore, direction };
-}
-
-function compareFramePair(previous, next) {
-  const stable = detectStableEdges(previous, next);
-  const down = findOverlap(
-    previous,
-    next,
-    'down',
-    { top: 0, bottom: stable.bottom },
-    { top: stable.top, bottom: 0 }
-  );
-  const up = findOverlap(
-    previous,
-    next,
-    'up',
-    { top: stable.top, bottom: 0 },
-    { top: 0, bottom: stable.bottom }
-  );
-  const winner = down.score <= up.score ? down : up;
-  return { ...winner, stable };
-}
-
-function chooseScrollDirection(transitions) {
-  const downScore = transitions
-    .filter((item) => item.direction === 'down')
-    .reduce((sum, item) => sum + Math.max(1, 255 - item.score), 0);
-  const upScore = transitions
-    .filter((item) => item.direction === 'up')
-    .reduce((sum, item) => sum + Math.max(1, 255 - item.score), 0);
-  return upScore > downScore ? 'up' : 'down';
-}
-
-function buildCropPlan(frames, transitions, direction) {
-  const topStable = frames.map(() => 0);
-  const bottomStable = frames.map(() => 0);
-
-  transitions.forEach((transition, index) => {
-    topStable[index] = Math.max(topStable[index], transition.stable.top);
-    topStable[index + 1] = Math.max(topStable[index + 1], transition.stable.top);
-    bottomStable[index] = Math.max(bottomStable[index], transition.stable.bottom);
-    bottomStable[index + 1] = Math.max(bottomStable[index + 1], transition.stable.bottom);
-  });
-
-  const topmostIndex = direction === 'down' ? 0 : frames.length - 1;
-  const bottommostIndex = direction === 'down' ? frames.length - 1 : 0;
-  return frames.map((frame, index) => clampCrop(frame, {
-    top: index === topmostIndex ? 0 : topStable[index],
-    bottom: index === bottommostIndex ? 0 : bottomStable[index]
-  }));
-}
-
-function cropPiece(frame, y, height) {
-  const cropY = Math.max(0, Math.min(frame.bitmap.height - 1, Math.round(y)));
-  const cropHeight = Math.max(1, Math.min(frame.bitmap.height - cropY, Math.round(height)));
-  return frame.clone().crop({ x: 0, y: cropY, w: frame.bitmap.width, h: cropHeight });
-}
-
-async function stitchScrollFrames(framePaths, outputPath, preferredDirection = null) {
-  const rawFrames = await Promise.all(framePaths.map((filePath) => Jimp.read(filePath)));
-  const frames = [];
-  rawFrames.forEach((frame) => {
-    const previous = frames[frames.length - 1];
-    if (!previous || frameDifference(previous, frame) > 2) frames.push(frame);
-  });
-  if (!frames.length) throw new Error('No scroll frames were captured.');
-
-  if (frames.length === 1) {
-    await frames[0].write(outputPath);
-    return;
-  }
-
-  const transitions = [];
-  for (let index = 1; index < frames.length; index += 1) {
-    transitions.push(compareFramePair(frames[index - 1], frames[index]));
-  }
-
-  const direction = ['up', 'down'].includes(preferredDirection) ? preferredDirection : chooseScrollDirection(transitions);
-  const crops = buildCropPlan(frames, transitions, direction);
-  const pieces = [];
-
-  if (direction === 'down') {
-    for (let index = 0; index < frames.length; index += 1) {
-      const crop = crops[index];
-      let y = crop.top;
-      let height = frames[index].bitmap.height - crop.top - crop.bottom;
-      if (index > 0) {
-        const transition = findOverlap(frames[index - 1], frames[index], direction, crops[index - 1], crop);
-        y += transition.overlap;
-        height -= transition.overlap;
-      }
-      if (height > 0) pieces.push(cropPiece(frames[index], y, height));
-    }
-  } else {
-    for (let index = 0; index < frames.length; index += 1) {
-      const crop = crops[index];
-      const transition = index > 0
-        ? findOverlap(frames[index - 1], frames[index], direction, crops[index - 1], crop)
-        : { overlap: 0 };
-      const height = frames[index].bitmap.height - crop.top - crop.bottom - transition.overlap;
-      if (height > 0) pieces.unshift(cropPiece(frames[index], crop.top, height));
-    }
-  }
-
-  if (!pieces.length) pieces.push(frames[0]);
-  const width = Math.max(...pieces.map((piece) => piece.bitmap.width));
-  const height = pieces.reduce((sum, piece) => sum + piece.bitmap.height, 0);
-  const output = new Jimp({ width, height, color: rgbaToInt(255, 255, 255, 255) });
-  let y = 0;
-  pieces.forEach((piece) => {
-    output.composite(piece, 0, y);
-    y += piece.bitmap.height;
-  });
-  await output.write(outputPath);
 }
 
 async function startManualScrollCapture(rect) {
@@ -941,8 +793,13 @@ async function refreshSnipViews() {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('library:snips', snips);
   if (shelfWindow && !shelfWindow.isDestroyed()) {
     shelfWindow.webContents.send('shelf:snips', snips.pending);
-    if (snips.pending.length) showShelfWindow();
-    else shelfWindow.hide();
+    if (snips.pending.length) {
+      showShelfWindow();
+      startShelfWatchdog();
+    } else {
+      stopShelfWatchdog();
+      shelfWindow.hide();
+    }
   }
   return snips;
 }
@@ -958,13 +815,106 @@ async function moveRecord(id, fromBucket, toBucket, patch = {}) {
   return updated;
 }
 
+function trayImage() {
+  const image = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png'));
+  if (image.isEmpty()) return nativeImage.createEmpty();
+  image.setTemplateImage(true);
+  return image;
+}
+
+const UPDATE_FEED = 'https://api.github.com/repos/kaptainkoder/SnipPilot---macOS/releases/latest';
+const RELEASES_PAGE = 'https://github.com/kaptainkoder/SnipPilot---macOS/releases/latest';
+let updateCheckInFlight = false;
+
+function compareVersions(a, b) {
+  const pa = String(a).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+function fetchLatestRelease() {
+  return new Promise((resolve, reject) => {
+    const req = https.get(UPDATE_FEED, {
+      headers: { 'User-Agent': 'SnipPilot-UpdateCheck', Accept: 'application/vnd.github+json' },
+      timeout: 8000
+    }, (res) => {
+      if (res.statusCode && res.statusCode >= 300) {
+        res.resume();
+        reject(new Error(`GitHub returned HTTP ${res.statusCode}.`));
+        return;
+      }
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+        if (body.length > 1_000_000) req.destroy(new Error('Update response too large.'));
+      });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('Update check timed out.')));
+    req.on('error', reject);
+  });
+}
+
+// User-initiated only. Snip Pilot makes no background network calls; this runs
+// exclusively when the user clicks "Check for Updates…".
+async function checkForUpdates(interactive = true) {
+  if (updateCheckInFlight) return;
+  updateCheckInFlight = true;
+  try {
+    const release = await fetchLatestRelease();
+    const latest = release.tag_name || release.name || '';
+    const current = app.getVersion();
+    if (latest && compareVersions(latest, current) > 0) {
+      const choice = dialog.showMessageBoxSync({
+        type: 'info',
+        buttons: ['Download', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+        title: 'Update available',
+        message: `Snip Pilot ${latest.replace(/^v/, '')} is available.`,
+        detail: `You have ${current}. Open the download page in your browser?`
+      });
+      if (choice === 0) shell.openExternal(release.html_url || RELEASES_PAGE);
+    } else if (interactive) {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'You are up to date',
+        message: `Snip Pilot ${current} is the latest version.`
+      });
+    }
+  } catch (error) {
+    if (interactive) {
+      dialog.showMessageBox({
+        type: 'warning',
+        title: 'Update check failed',
+        message: 'Could not check for updates.',
+        detail: `${error.message}\n\nThis is the only time Snip Pilot uses the network, and only when you ask it to.`
+      });
+    }
+  } finally {
+    updateCheckInFlight = false;
+  }
+}
+
 function createTray() {
-  const trayImage = nativeImage.createEmpty();
-  tray = new Tray(trayImage);
+  tray = new Tray(trayImage());
   tray.setToolTip('Snip Pilot');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'New snip', click: startSnip },
     { label: 'Open library', click: ensureMainWindow },
+    { type: 'separator' },
+    { label: 'Check for Updates…', click: () => checkForUpdates(true) },
     { type: 'separator' },
     { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } }
   ]));
@@ -973,8 +923,11 @@ function createTray() {
 app.whenReady().then(async () => {
   await loadConfig();
   await ensureStorage();
+  const allowedProtocols = app.isPackaged
+    ? ['file:', 'data:']
+    : ['file:', 'data:', 'devtools:'];
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
-    const allowed = ['file:', 'data:', 'devtools:'].some((protocol) => details.url.startsWith(protocol));
+    const allowed = allowedProtocols.some((protocol) => details.url.startsWith(protocol));
     callback({ cancel: !allowed });
   });
   createMainWindow();
@@ -986,10 +939,18 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     ensureMainWindow();
+    reassertShelfWindowSoon();
   });
+
+  powerMonitor.on('resume', reassertShelfWindowSoon);
+  powerMonitor.on('unlock-screen', reassertShelfWindowSoon);
+  screen.on('display-added', reassertShelfWindowSoon);
+  screen.on('display-removed', reassertShelfWindowSoon);
+  screen.on('display-metrics-changed', reassertShelfWindowSoon);
 });
 
 app.on('will-quit', () => {
+  stopShelfWatchdog();
   globalShortcut.unregisterAll();
 });
 
@@ -1002,6 +963,8 @@ ipcMain.handle('app:start-snip', startSnip);
 ipcMain.handle('app:start-scroll-snip', startScrollSnip);
 
 ipcMain.handle('app:get-info', () => appInfo());
+
+ipcMain.handle('app:open-screen-settings', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'));
 
 ipcMain.handle('app:choose-storage-dir', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -1016,7 +979,10 @@ ipcMain.handle('app:choose-storage-dir', async () => {
 ipcMain.handle('app:update-config', async (_event, payload = {}) => saveConfig({
   configured: true,
   shortcut: payload.shortcut || shortcut,
-  storageDir: payload.storageDir || captureDir
+  storageDir: payload.storageDir || captureDir,
+  clipboardClearMinutes: typeof payload.clipboardClearMinutes === 'number'
+    ? Math.max(0, payload.clipboardClearMinutes)
+    : appConfig.clipboardClearMinutes
 }));
 
 ipcMain.handle('app:quit', () => {
@@ -1084,6 +1050,7 @@ ipcMain.handle('capture:save', async (_event, payload) => {
 
 ipcMain.handle('capture:copy-image', (_event, dataUrl) => {
   clipboard.writeImage(nativeImage.createFromDataURL(dataUrl));
+  scheduleClipboardClear();
 });
 
 ipcMain.handle('snips:list', listSnips);
@@ -1097,17 +1064,20 @@ ipcMain.handle('snips:load-image', async (_event, filePath) => nativeImage.creat
 ipcMain.handle('snips:copy-pending', async (_event, id) => {
   const paths = snipPaths('pending', id);
   clipboard.writeImage(nativeImage.createFromPath(paths.imagePath));
+  scheduleClipboardClear();
   return moveRecord(id, 'pending', 'copied');
 });
 
 ipcMain.handle('snips:copy-image-by-path', async (_event, filePath) => {
   clipboard.writeImage(nativeImage.createFromPath(filePath));
+  scheduleClipboardClear();
   return { ok: true };
 });
 
 ipcMain.handle('snips:save-pending', async (_event, id) => {
   const paths = snipPaths('pending', id);
   clipboard.writeImage(nativeImage.createFromPath(paths.imagePath));
+  scheduleClipboardClear();
   return moveRecord(id, 'pending', 'copied');
 });
 
@@ -1147,6 +1117,7 @@ ipcMain.handle('editor:finish', async (_event, payload) => {
   const paths = snipPaths(bucket, payload.id);
   await saveDataUrl(paths.imagePath, payload.imageDataUrl);
   clipboard.writeImage(nativeImage.createFromDataURL(payload.imageDataUrl));
+  scheduleClipboardClear();
   const updated = await recordFromPath(bucket, paths.imagePath);
   await refreshSnipViews();
   if (editorWindow && !editorWindow.isDestroyed()) {

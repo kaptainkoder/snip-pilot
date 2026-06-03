@@ -1,12 +1,14 @@
 {
   "name": "snip-pilot",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "A local-first macOS screenshot, snipping, annotation, and agent handoff desktop app.",
   "main": "src/main.js",
   "author": "Snip Pilot contributors",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "test": "node --test",
+    "check": "node --check src/main.js && node --check src/scroll-stitch.js",
     "pack": "electron-builder --mac --dir --arm64 && scripts/sign-mac-app.sh",
     "dist": "npm run pack && scripts/create-dmg.sh"
   },
@@ -15,7 +17,12 @@
     "productName": "Snip Pilot",
     "mac": {
       "identity": null,
+      "icon": "build/icon.png",
       "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "NSAudioCaptureUsageDescription": "Snip Pilot does not record audio. It only captures the screen when you start a snip.",
         "NSBluetoothAlwaysUsageDescription": "Snip Pilot does not use Bluetooth.",
@@ -43,8 +50,16 @@
       "package.json"
     ],
     "directories": {
-      "output": "release"
-    }
+      "output": "release",
+      "buildResources": "build"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kaptainkoder",
+        "repo": "SnipPilot---macOS"
+      }
+    ]
   },
   "devDependencies": {
     "electron": "^42.3.0",
