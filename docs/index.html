@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snip Pilot — Local-first macOS screenshots</title>
+<meta name="description" content="A free, local-first macOS snipping app with your own global shortcut, scrolling capture, and zero telemetry. Snip, annotate, paste. No cloud.">
+<!-- No external fonts, CDNs, or trackers. Fitting for a privacy-first app. -->
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #9da7b3;
+    --accent: #4f9cff;
+    --accent-2: #db61a2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+  header { text-align: center; padding: 72px 0 40px; }
+  h1 { font-size: 2.6rem; margin: 0 0 12px; letter-spacing: -0.02em; }
+  .tagline { font-size: 1.25rem; color: var(--muted); margin: 0 auto 28px; max-width: 640px; }
+  .sub { color: var(--muted); font-size: 0.95rem; }
+  .cta {
+    display: inline-block; background: var(--accent); color: #fff; text-decoration: none;
+    font-weight: 600; padding: 14px 28px; border-radius: 10px; font-size: 1.05rem;
+    margin: 8px 8px 0;
+  }
+  .cta.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .demo {
+    margin: 44px auto; border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+    background: var(--panel); max-width: 820px;
+  }
+  .demo img { display: block; width: 100%; }
+  .demo .placeholder {
+    aspect-ratio: 16 / 10; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 0.95rem; text-align: center; padding: 24px;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin: 56px 0; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
+  .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+  .privacy {
+    background: linear-gradient(180deg, #14233b, #101826); border: 1px solid #1f3a5f;
+    border-radius: 14px; padding: 36px; text-align: center; margin: 56px 0;
+  }
+  .privacy h2 { margin: 0 0 12px; }
+  .privacy p { color: var(--muted); margin: 0 auto; max-width: 620px; }
+  footer { border-top: 1px solid var(--border); padding: 36px 0 56px; text-align: center; color: var(--muted); font-size: 0.9rem; }
+  footer a { margin: 0 10px; }
+  .note { font-size: 0.85rem; color: var(--muted); margin-top: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Snip Pilot</h1>
+    <p class="tagline">Screenshot. Annotate. Paste. No cloud. A free, local-first macOS snipping app with your own global shortcut and scrolling capture.</p>
+    <a class="cta" href="https://github.com/kaptainkoder/SnipPilot---macOS/releases/latest">Download for Mac — Free</a>
+    <a class="cta secondary" href="https://github.com/kaptainkoder/SnipPilot---macOS">View on GitHub</a>
+    <p class="note">Apple Silicon · ad-hoc signed (right-click → Open on first launch) · MIT licensed</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="demo">
+    <img src="demo.gif" alt="Snip Pilot demo: snip, annotate, paste">
+  </div>
+
+  <div class="grid">
+    <div class="card"><h3>Your shortcut</h3><p>Pick the global hotkey on first run. One press to snip, double press for a scrolling capture.</p></div>
+    <div class="card"><h3>One keypress to paste</h3><p>Snip, annotate, close the editor — it is already on your clipboard, ready to paste anywhere.</p></div>
+    <div class="card"><h3>Scrolling capture</h3><p>Scroll the page yourself and add each view. Smart stitching removes repeated headers and footers.</p></div>
+    <div class="card"><h3>Annotate fast</h3><p>Arrows, numbered step markers, redaction, highlighter, text — with an object-aware eraser.</p></div>
+    <div class="card"><h3>One local folder</h3><p>Every snip is a plain PNG in the folder you choose at setup. No accounts, no hidden sidecar files.</p></div>
+    <div class="card"><h3>Zero telemetry</h3><p>No cloud, no analytics, no CDN. The app blocks network requests. Nothing leaves your Mac.</p></div>
+  </div>
+
+  <div class="privacy">
+    <h2>Everything stays on your Mac</h2>
+    <p>No uploads, no accounts, no analytics. Snip Pilot is local-first by construction — the app blocks network requests, and every snip lives only in the folder you pick. It is open source, so you can read exactly what it does.</p>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/kaptainkoder/SnipPilot---macOS">GitHub</a>
+    <a href="https://github.com/kaptainkoder/SnipPilot---macOS/releases/latest">Download</a>
+    <a href="https://github.com/kaptainkoder/SnipPilot---macOS/issues">Feedback</a>
+    <p class="note">Free and open source (MIT). If it is useful, a GitHub star helps.</p>
+  </div>
+</footer>
+</body>
+</html>
