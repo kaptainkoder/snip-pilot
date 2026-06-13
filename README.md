@@ -1,6 +1,17 @@
 # Snip Pilot
 
+**Screenshot. Annotate. Paste. No cloud.** A free, local-first macOS snipping app with your own global shortcut, scrolling capture, and zero telemetry.
+
+![Snip Pilot demo](assets/demo.gif)
+
 Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick access, annotation, scrolling capture, and clipboard handoff. It is designed for people who want to capture UI feedback while working and paste the result into a chat, issue, document, or agent workflow without uploading anything to a hosted service.
+
+## Why Snip Pilot
+
+- **Your shortcut, your call.** Choose the global hotkey on first run. Press once to snip, press twice for a scrolling capture.
+- **One keypress to paste.** Snip → annotate → close the editor → it is already on your clipboard.
+- **One local folder.** Every snip is a plain PNG in the folder you pick at setup. No accounts, no sidecar files.
+- **Local-only, by design.** No cloud, no telemetry, no analytics, no CDN. The app blocks network requests.
 
 ## Download
 
@@ -134,3 +145,11 @@ If you start near the top and scroll down, the final image is ordered top-to-bot
 - Source lives in `src/`.
 - Generated app bundles, local snips, and dependencies are ignored by Git.
 - The app currently targets macOS.
+
+## Support
+
+Snip Pilot is free and open source (MIT). If it is useful to you, a GitHub star helps me know it is worth continuing to build — and feedback via [issues](https://github.com/kaptainkoder/SnipPilot---macOS/issues) is even more welcome.
+
+<!-- Add your funding links here once set up, e.g. Buy Me a Coffee or GitHub Sponsors:
+[![Sponsor](https://img.shields.io/badge/Sponsor-❤-db61a2)](https://github.com/sponsors/kaptainkoder)
+-->
