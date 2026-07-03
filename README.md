@@ -38,6 +38,17 @@ The DMG is ad-hoc signed for a stable local app identity, but it is not Apple De
 - Clean local library grouped by date with filters for all, today, week, and month.
 - Local-only storage with no backend, telemetry, analytics, CDN assets, or auto-upload.
 
+## How It's Built
+
+- **Electron + vanilla JS** (`src/main.js`), packaged for Apple Silicon with `electron-builder`
+  and shipped as an ad-hoc-signed DMG via GitHub Releases.
+- **Scroll stitching engine** (`src/scroll-stitch.js`) — detects scroll direction between
+  captures and de-duplicates stable headers/footers before compositing the long screenshot.
+- **Security hardening** — restrictive CSP in every renderer, popups and external navigation
+  blocked, renderer permission requests denied, and macOS entitlements that explicitly
+  declare what the app does *not* access (camera, mic, Bluetooth).
+- **Tested** — core logic covered with `node --test`; syntax gate via `npm run check`.
+
 ## Local Storage
 
 Snips are stored in a single local folder:
