@@ -11,7 +11,7 @@ Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick 
 - **Your shortcut, your call.** Choose the global hotkey on first run. Press once to snip, press twice for a scrolling capture.
 - **One keypress to paste.** Snip → annotate → close the editor → it is already on your clipboard.
 - **One local folder.** Every snip is a plain PNG in the folder you pick at setup. No accounts, no sidecar files.
-- **Local-only, by design.** No cloud, no telemetry, no analytics, no CDN. The app blocks network requests.
+- **Local-only, by design.** No cloud, no telemetry, no analytics, no CDN, and no snip uploads. The capture/editor windows block network requests; the only network path is a user-clicked update check to GitHub Releases.
 
 ## Download
 
@@ -89,7 +89,7 @@ The app keeps this configuration in the local macOS application support folder. 
 - Renderer windows use a restrictive Content Security Policy.
 - External navigation and popups are blocked.
 - Renderer permission requests are denied.
-- Network requests are blocked except local `file:`, `data:`, and developer-tool URLs.
+- Renderer network requests are blocked except local `file:`, `data:`, and developer-tool URLs. The tray's `Check for Updates...` action contacts GitHub Releases only when you click it.
 - Clipboard writes are local macOS clipboard writes. Other local apps with clipboard access may be able to read copied images.
 - Screen & System Audio Recording permission is required by macOS for screenshot apps. Snip Pilot does not record audio; the permission name is controlled by macOS.
 - The app bundle identity is `local.snippilot.app`. If macOS previously listed this project as `Electron`, remove or ignore that old entry and grant permission to `Snip Pilot.app`.
@@ -160,7 +160,3 @@ If you start near the top and scroll down, the final image is ordered top-to-bot
 ## Support
 
 Snip Pilot is free and open source (MIT). If it is useful to you, a GitHub star helps me know it is worth continuing to build — and feedback via [issues](https://github.com/kaptainkoder/SnipPilot---macOS/issues) is even more welcome.
-
-<!-- Add your funding links here once set up, e.g. Buy Me a Coffee or GitHub Sponsors:
-[![Sponsor](https://img.shields.io/badge/Sponsor-❤-db61a2)](https://github.com/sponsors/kaptainkoder)
--->
