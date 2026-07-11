@@ -16,3 +16,6 @@ downloads/*.dmg.sha256
 # Internal launch/strategy notes — never publish
 LAUNCH_*.md
 REDDIT_*.md
+
+# Agent verification hand-offs (local-only)
+docs/codex-tests/

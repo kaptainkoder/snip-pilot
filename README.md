@@ -19,6 +19,12 @@ Download the latest Apple Silicon macOS build from GitHub Releases:
 
 - [Latest Snip Pilot release](https://github.com/kaptainkoder/snip-pilot/releases/latest)
 
+Or install with Homebrew:
+
+```sh
+brew install --cask kaptainkoder/tap/snip-pilot
+```
+
 The DMG is ad-hoc signed for a stable local app identity, but it is not Apple Developer ID notarized. macOS may require right-clicking the app and choosing Open on first launch.
 
 ## Features
