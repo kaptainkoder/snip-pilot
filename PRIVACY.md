@@ -6,7 +6,7 @@ This document describes exactly what the app does and does not do with your data
 ## What stays on your Mac
 
 - **Your snips** are saved as plain PNG files in a folder you choose (default:
-  `~/Documents/Codex Projects/SnipPilotSnips`, in `Pending/` and `Copied/`).
+  `~/Documents/SnipPilotSnips`, in `Pending/` and `Copied/`).
 - **Your settings** live in a single local `config.json` under the app's user-data
   directory. Nothing is uploaded.
 - Snip Pilot writes **no `.json` or `.md` sidecar files** next to your images, and

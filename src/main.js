@@ -70,7 +70,7 @@ function hardenWindow(window) {
 }
 
 function defaultCaptureDir() {
-  return process.env.SNIP_PILOT_STORAGE_DIR || path.join(app.getPath('documents'), 'Codex Projects', 'SnipPilotSnips');
+  return process.env.SNIP_PILOT_STORAGE_DIR || path.join(app.getPath('documents'), 'SnipPilotSnips');
 }
 
 function configPath() {

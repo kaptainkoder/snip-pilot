@@ -54,7 +54,7 @@ The DMG is ad-hoc signed for a stable local app identity, but it is not Apple De
 Snips are stored in a single local folder:
 
 ```text
-~/Documents/Codex Projects/SnipPilotSnips/
+~/Documents/SnipPilotSnips/
   Pending/
   Copied/
 ```
