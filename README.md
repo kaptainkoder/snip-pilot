@@ -1,6 +1,6 @@
 # Snip Pilot
 
-**Screenshot. Annotate. Paste. No cloud.** A free, local-first macOS snipping app with your own global shortcut, scrolling capture, and zero telemetry.
+**The fastest way to get annotated UI context into your AI agent — without it leaving your Mac.** Screenshot, annotate, paste into Claude, Cursor, ChatGPT, or any chat, issue, or doc. Free, local-first, zero telemetry, with your own global shortcut and scrolling capture.
 
 ![Snip Pilot demo](assets/demo.gif)
 
