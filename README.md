@@ -17,7 +17,7 @@ Snip Pilot is a local-first macOS desktop app for fast snipping, floating quick 
 
 Download the latest Apple Silicon macOS build from GitHub Releases:
 
-- [Latest Snip Pilot release](https://github.com/kaptainkoder/SnipPilot---macOS/releases/latest)
+- [Latest Snip Pilot release](https://github.com/kaptainkoder/snip-pilot/releases/latest)
 
 The DMG is ad-hoc signed for a stable local app identity, but it is not Apple Developer ID notarized. macOS may require right-clicking the app and choosing Open on first launch.
 
@@ -159,4 +159,4 @@ If you start near the top and scroll down, the final image is ordered top-to-bot
 
 ## Support
 
-Snip Pilot is free and open source (MIT). If it is useful to you, a GitHub star helps me know it is worth continuing to build — and feedback via [issues](https://github.com/kaptainkoder/SnipPilot---macOS/issues) is even more welcome.
+Snip Pilot is free and open source (MIT). If it is useful to you, a GitHub star helps me know it is worth continuing to build — and feedback via [issues](https://github.com/kaptainkoder/snip-pilot/issues) is even more welcome.
